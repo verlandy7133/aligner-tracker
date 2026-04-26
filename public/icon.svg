@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0c1220"/>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#a78bfa"/>
+    </linearGradient>
+  </defs>
+  <!-- Tooth shape simplified -->
+  <path d="M256 96
+           C 200 96, 156 130, 156 180
+           C 156 215, 168 245, 188 280
+           C 200 315, 200 360, 215 410
+           C 220 430, 240 440, 256 440
+           C 272 440, 292 430, 297 410
+           C 312 360, 312 315, 324 280
+           C 344 245, 356 215, 356 180
+           C 356 130, 312 96, 256 96 Z"
+        fill="url(#g)"/>
+  <!-- Center alignment line -->
+  <line x1="256" y1="220" x2="256" y2="380" stroke="#0c1220" stroke-width="6" opacity="0.6"/>
+</svg>

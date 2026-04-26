@@ -1,0 +1,201 @@
+@import "tailwindcss";
+
+html, body, #root {
+  height: 100%;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-attachment: fixed;
+  color: #f4f4f5;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', system-ui, 'Segoe UI', 'Noto Sans TC', sans-serif;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* 列印樣式 — 月報專用 */
+@media print {
+  html, body {
+    background: white !important;
+    color: black !important;
+  }
+  /* 隱藏 nav + 任何 .print:hidden 元素 */
+  nav, .print\:hidden {
+    display: none !important;
+  }
+  /* main 不要 max-width / padding 那麼擠 */
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  .report {
+    color: black !important;
+  }
+  .report h1, .report h2, .report h3 {
+    color: black !important;
+  }
+  .report table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 11px;
+  }
+  .report table th,
+  .report table td {
+    border: 1px solid #ccc;
+    padding: 4px 6px;
+  }
+  .break-inside-avoid {
+    break-inside: avoid;
+  }
+}
+
+/* ─── 主題 1：現在版本 (current) — 預設 ─────────────── */
+html[data-theme="current"] body,
+html:not([data-theme]) body {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(56, 189, 248, 0.08), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 0% 100%, rgba(167, 139, 250, 0.06), transparent 60%),
+    #09090d;
+}
+
+/* ─── 主題 2：時尚 (fashion) — 暗黑霓虹 ─────────────── */
+html[data-theme="fashion"] body {
+  background:
+    radial-gradient(ellipse 70% 50% at 100% 0%, rgba(255, 0, 170, 0.18), transparent 55%),
+    radial-gradient(ellipse 60% 50% at 0% 100%, rgba(0, 212, 255, 0.15), transparent 60%),
+    radial-gradient(ellipse 40% 30% at 50% 50%, rgba(168, 85, 247, 0.08), transparent 60%),
+    #060608;
+  font-family: 'Space Grotesk', 'Inter', system-ui, 'Noto Sans TC', sans-serif;
+  letter-spacing: 0.01em;
+}
+
+/* ─── 主題 3：樸實 (plain) — 白底極簡 ─────────────── */
+html[data-theme="plain"] {
+  color-scheme: light;
+}
+
+html[data-theme="plain"] body {
+  background: #d4d4d8;  /* 中性灰 zinc-300 */
+  color: #18181b;
+  font-family: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+  letter-spacing: 0.02em;
+}
+
+html[data-theme="plain"] .tabular {
+  letter-spacing: 0.02em;
+}
+
+/* 表面 backgrounds：body 是中灰，card/modal 比 body 淺一階 (對比) */
+html[data-theme="plain"] .bg-zinc-950 { background-color: #fafafa !important; }       /* modal/最頂層 = 接近白 */
+html[data-theme="plain"] .bg-zinc-950\/40 { background-color: rgba(244, 244, 245, 0.6) !important; }
+html[data-theme="plain"] .bg-zinc-900 { background-color: #e4e4e7 !important; }       /* 中灰 zinc-200 */
+html[data-theme="plain"] .bg-zinc-900\/30 { background-color: rgba(228, 228, 231, 0.5) !important; }
+html[data-theme="plain"] .bg-zinc-900\/40 { background-color: rgba(228, 228, 231, 0.6) !important; }
+html[data-theme="plain"] .bg-zinc-900\/60 { background-color: rgba(244, 244, 245, 0.85) !important; }  /* 表格 header 接近白 */
+html[data-theme="plain"] .bg-zinc-800 { background-color: #d4d4d8 !important; }
+html[data-theme="plain"] .bg-zinc-800\/30 { background-color: rgba(212, 212, 216, 0.5) !important; }
+html[data-theme="plain"] .bg-zinc-800\/50 { background-color: rgba(212, 212, 216, 0.7) !important; }
+html[data-theme="plain"] .bg-zinc-800\/60 { background-color: rgba(212, 212, 216, 0.8) !important; }
+html[data-theme="plain"] .bg-zinc-800\/80 { background-color: #a1a1aa !important; }
+html[data-theme="plain"] .bg-zinc-700 { background-color: #a1a1aa !important; }
+html[data-theme="plain"] .bg-black\/60 { background-color: rgba(24, 24, 27, 0.35) !important; }
+
+/* Text colors：所有 zinc 文字反轉 */
+html[data-theme="plain"] .text-zinc-100 { color: #0f172a !important; }
+html[data-theme="plain"] .text-zinc-200 { color: #1e293b !important; }
+html[data-theme="plain"] .text-zinc-300 { color: #334155 !important; }
+html[data-theme="plain"] .text-zinc-400 { color: #64748b !important; }
+html[data-theme="plain"] .text-zinc-500 { color: #94a3b8 !important; }
+html[data-theme="plain"] .text-zinc-600 { color: #cbd5e1 !important; }
+html[data-theme="plain"] .text-zinc-700 { color: #e2e8f0 !important; }
+
+/* Borders — 配合中灰背景，邊線稍微深一點才看得到 */
+html[data-theme="plain"] .border-zinc-700 { border-color: #a1a1aa !important; }
+html[data-theme="plain"] .border-zinc-800 { border-color: #a1a1aa !important; }
+html[data-theme="plain"] .border-zinc-900 { border-color: #d4d4d8 !important; }
+html[data-theme="plain"] .divide-zinc-800\/60 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #a1a1aa !important;
+}
+
+/* Badge / accent text 在白底要加深才看得清 */
+html[data-theme="plain"] .text-emerald-300 { color: #047857 !important; }
+html[data-theme="plain"] .text-emerald-400 { color: #059669 !important; }
+html[data-theme="plain"] .text-rose-300 { color: #be123c !important; }
+html[data-theme="plain"] .text-rose-400 { color: #e11d48 !important; }
+html[data-theme="plain"] .text-sky-300 { color: #0369a1 !important; }
+html[data-theme="plain"] .text-sky-400 { color: #0284c7 !important; }
+html[data-theme="plain"] .text-amber-300 { color: #b45309 !important; }
+html[data-theme="plain"] .text-amber-400 { color: #d97706 !important; }
+html[data-theme="plain"] .text-violet-300 { color: #6d28d9 !important; }
+html[data-theme="plain"] .text-cyan-300 { color: #0e7490 !important; }
+html[data-theme="plain"] .text-pink-300 { color: #be185d !important; }
+html[data-theme="plain"] .text-teal-300 { color: #0d9488 !important; }
+html[data-theme="plain"] .text-indigo-300 { color: #4338ca !important; }
+html[data-theme="plain"] .text-orange-300 { color: #c2410c !important; }
+html[data-theme="plain"] .text-yellow-300 { color: #a16207 !important; }
+
+/* Badge bg 透明度提升避免太淡看不到 */
+html[data-theme="plain"] .bg-emerald-500\/15 { background-color: rgba(16, 185, 129, 0.12) !important; }
+html[data-theme="plain"] .bg-rose-500\/15 { background-color: rgba(244, 63, 94, 0.12) !important; }
+html[data-theme="plain"] .bg-sky-500\/15 { background-color: rgba(14, 165, 233, 0.12) !important; }
+html[data-theme="plain"] .bg-amber-500\/15 { background-color: rgba(245, 158, 11, 0.12) !important; }
+html[data-theme="plain"] .bg-violet-500\/15 { background-color: rgba(139, 92, 246, 0.12) !important; }
+html[data-theme="plain"] .bg-cyan-500\/15 { background-color: rgba(6, 182, 212, 0.12) !important; }
+html[data-theme="plain"] .bg-pink-500\/15 { background-color: rgba(236, 72, 153, 0.12) !important; }
+html[data-theme="plain"] .bg-teal-500\/15 { background-color: rgba(20, 184, 166, 0.12) !important; }
+html[data-theme="plain"] .bg-indigo-500\/15 { background-color: rgba(99, 102, 241, 0.12) !important; }
+html[data-theme="plain"] .bg-orange-500\/15 { background-color: rgba(249, 115, 22, 0.12) !important; }
+
+/* sky-500 主色按鈕（+ 新增 等）在白底反而 OK，但需要文字深色 */
+html[data-theme="plain"] .bg-sky-500 { background-color: #0284c7 !important; }
+html[data-theme="plain"] .bg-sky-500.text-zinc-950 { color: #ffffff !important; }
+html[data-theme="plain"] .hover\:bg-sky-400:hover { background-color: #0ea5e9 !important; }
+
+/* hover 反色 */
+html[data-theme="plain"] .hover\:bg-zinc-800:hover { background-color: #e2e8f0 !important; }
+html[data-theme="plain"] .hover\:bg-zinc-800\/30:hover { background-color: rgba(226, 232, 240, 0.5) !important; }
+html[data-theme="plain"] .hover\:bg-zinc-800\/60:hover { background-color: rgba(226, 232, 240, 0.7) !important; }
+html[data-theme="plain"] .hover\:bg-zinc-700:hover { background-color: #cbd5e1 !important; }
+html[data-theme="plain"] .hover\:text-zinc-100:hover { color: #0f172a !important; }
+html[data-theme="plain"] .hover\:text-zinc-200:hover { color: #1e293b !important; }
+
+/* nav pulse dot 還是亮藍色 OK */
+
+/* ─── 主題 4：現代 (modern) — 簡潔幾何 ─────────────── */
+html[data-theme="modern"] body {
+  background:
+    linear-gradient(180deg, rgba(16, 185, 129, 0.04) 0%, transparent 30%),
+    #0a0d10;
+  font-family: 'Inter', 'IBM Plex Sans', system-ui, 'Noto Sans TC', sans-serif;
+}
+
+/* 現代主題：減少圓角、加邊框 (透過後代選擇器套用到所有 rounded 元素) */
+html[data-theme="modern"] .rounded-xl,
+html[data-theme="modern"] .rounded-lg {
+  border-radius: 4px;
+}
+html[data-theme="modern"] .rounded-md {
+  border-radius: 2px;
+}
+html[data-theme="modern"] .rounded-full {
+  border-radius: 999px; /* badge 還是圓的 */
+}
+
+/* 樸實主題：降低圓角到方形邊角 */
+html[data-theme="plain"] .rounded-xl,
+html[data-theme="plain"] .rounded-lg,
+html[data-theme="plain"] .rounded-md {
+  border-radius: 0;
+}
+html[data-theme="plain"] .rounded-full {
+  border-radius: 0;
+}

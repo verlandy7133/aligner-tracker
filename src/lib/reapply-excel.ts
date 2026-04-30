@@ -45,7 +45,7 @@ function parseAlignerRangeMax(range: string): { upper: number | null; lower: num
 // 從某 patient 的所有 orders 推算「目前戴到第幾副」
 // 規則：取 progress = '已完成' 或 '診所已收到牙套' 的 order 中，alignerRange 最大值
 //      找不到完成的就取最新一筆 order 的最大值（保守估計）
-function deriveCurrentFromOrders(orders: Order[]): { upper: number | null; lower: number | null } {
+export function deriveCurrentFromOrders(orders: Order[]): { upper: number | null; lower: number | null } {
   if (!orders.length) return { upper: null, lower: null };
   const completed = orders.filter(
     (o) => o.progress === '已完成' || o.progress === '診所已收到牙套',

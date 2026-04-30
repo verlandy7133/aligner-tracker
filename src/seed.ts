@@ -1,6 +1,7 @@
 import { db } from './db';
 import { ensureDefaultLabsSeeded } from './lib/labs';
 import { ensureDefaultDoctorsSeeded } from './lib/doctors';
+import { deriveCurrentFromOrders } from './lib/reapply-excel';
 import type { Order, Patient } from './types/Patient';
 
 export type SeedResult =
@@ -95,6 +96,23 @@ async function doSeed(): Promise<SeedResult> {
     for (const order of excelOrders) {
       const newChartNo = chartNoMap.get(order.patientId);
       if (newChartNo) order.patientChartNo = newChartNo;
+    }
+
+    // 5. 從 orders 推 currentAligner（之前 reapplyExcelUpdates 才做、現在 seed 也做）
+    //    這樣 fresh-seed 後副數進度條馬上 work，不用 user 再點「重新套用 Excel」
+    if (excelOrders.length > 0) {
+      const ordersByPatient = new Map<string, Order[]>();
+      for (const o of excelOrders) {
+        if (!ordersByPatient.has(o.patientId)) ordersByPatient.set(o.patientId, []);
+        ordersByPatient.get(o.patientId)!.push(o);
+      }
+      for (const p of merged) {
+        const os = ordersByPatient.get(p.id);
+        if (!os || os.length === 0) continue;
+        const derived = deriveCurrentFromOrders(os);
+        if (derived.upper != null) p.currentAlignerUpper = derived.upper;
+        if (derived.lower != null) p.currentAlignerLower = derived.lower;
+      }
     }
 
     await db.patients.bulkPut(merged);

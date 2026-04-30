@@ -218,7 +218,7 @@ def main():
                 'currentAlignerUpper': None,  # current 從 orders 推算，不從 Excel col 6 讀
                 'totalAlignersLower': lower_t,
                 'currentAlignerLower': None,
-                'cycleDays': 10,
+                'cycleDays': 14,
                 'lastVisit': None,
                 'nextVisit': None,
                 'hasConsent': consent if consent is not None else False,

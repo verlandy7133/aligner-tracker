@@ -229,7 +229,7 @@ def main():
                     'currentAlignerUpper': None,
                     'totalAlignersLower': None,
                     'currentAlignerLower': None,
-                    'cycleDays': 10,
+                    'cycleDays': 14,
                     'lastVisit': None,
                     'nextVisit': None,
                     'hasConsent': False,

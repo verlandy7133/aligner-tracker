@@ -160,6 +160,25 @@ export default function PatientDetailPage() {
 
         {/* 副數進度 (含推算) */}
         <Card title="副數進度" className="md:col-span-2">
+          {/* 療程時間摘要：一副週期 + 已進行 + 剩餘 + 預計總月份 */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 pb-3 border-b border-zinc-800/60">
+            <Stat label="一副要帶" value={`${progress.cycleDays} 天`} />
+            <Stat
+              label="已進行"
+              value={progress.monthsElapsed != null ? `${progress.monthsElapsed} 個月` : '—'}
+              hint={!progress.effectiveStartDate ? '需開始日 / 下單日' : undefined}
+            />
+            <Stat
+              label="剩餘"
+              value={progress.monthsRemaining != null ? `${progress.monthsRemaining} 個月` : '—'}
+              hint={!progress.hasAnyData ? '需總副數' : undefined}
+            />
+            <Stat
+              label="預計總療程"
+              value={progress.totalMonths != null ? `${progress.totalMonths} 個月` : '—'}
+            />
+          </div>
+
           <div className="grid grid-cols-2 gap-6">
             <JawProgressBlock label="上顎" jaw={progress.upper} />
             <JawProgressBlock label="下顎" jaw={progress.lower} />
@@ -278,6 +297,18 @@ function KV({ k, v }: { k: string; v: React.ReactNode }) {
     <div className="flex items-baseline justify-between gap-3 text-sm">
       <span className="text-zinc-500 text-xs">{k}</span>
       <span className="text-zinc-200 tabular">{v}</span>
+    </div>
+  );
+}
+
+function Stat({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
+  return (
+    <div className="flex flex-col">
+      <span className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</span>
+      <span className="text-base font-semibold tabular text-zinc-100 mt-0.5" title={hint}>
+        {value}
+      </span>
+      {hint && <span className="text-[10px] text-zinc-600 mt-0.5">{hint}</span>}
     </div>
   );
 }

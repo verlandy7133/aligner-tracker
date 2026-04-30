@@ -228,7 +228,7 @@ const patients = collected.map((p, i) => ({
   currentAlignerUpper: null,
   totalAlignersLower: null,
   currentAlignerLower: null,
-  cycleDays: 10,
+  cycleDays: 14,
   lastVisit: null,
   nextVisit: null,
   hasConsent: p.hasConsent,

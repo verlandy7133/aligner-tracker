@@ -55,7 +55,7 @@ export type Patient = {
   updatedAt: string;
 };
 
-export const DEFAULT_CYCLE_DAYS = 10;
+export const DEFAULT_CYCLE_DAYS = 14;
 
 // ─── 下單追蹤 (Order) ───────────────────────────────────────
 // 與 Patient 是 N:1（一個病患可能多次下單）。

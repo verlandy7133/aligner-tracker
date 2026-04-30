@@ -32,6 +32,13 @@ export type PatientProgress = {
   /** lag 任一顎 > N 副就標 lagging */
   isLagging: boolean;
   worstLag: number; // 取上下顎較大那個
+
+  // 治療時程（patient 級別，不分顎；取上下顎較長那個算）
+  cycleDays: number;
+  effectiveStartDate: string | null; // startDate || orderDate
+  monthsElapsed: number | null; // 從 effectiveStartDate 到今天
+  monthsRemaining: number | null; // 今天到較長一顎的 estimatedEndDate
+  totalMonths: number | null; // effectiveStart 到較長一顎的 endDate
 };
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
@@ -76,18 +83,21 @@ function jawProgress(
 }
 
 export function deriveProgress(patient: Patient, todayISO: string): PatientProgress {
-  const cycleDays = patient.cycleDays > 0 ? patient.cycleDays : 10;
+  const cycleDays = patient.cycleDays > 0 ? patient.cycleDays : 14;
+  // startDate 多半沒填 → 退到 orderDate 至少有個基準算月份
+  const effectiveStartDate = patient.startDate || patient.orderDate;
+
   const upper = jawProgress(
     patient.totalAlignersUpper,
     patient.currentAlignerUpper,
-    patient.startDate,
+    effectiveStartDate,
     cycleDays,
     todayISO,
   );
   const lower = jawProgress(
     patient.totalAlignersLower,
     patient.currentAlignerLower,
-    patient.startDate,
+    effectiveStartDate,
     cycleDays,
     todayISO,
   );
@@ -95,6 +105,34 @@ export function deriveProgress(patient: Patient, todayISO: string): PatientProgr
   const lagU = upper.lag ?? 0;
   const lagL = lower.lag ?? 0;
   const worstLag = Math.max(lagU, lagL);
-  const isLagging = worstLag >= 2; // 落後 2 副以上才算
-  return { upper, lower, hasAnyData, isLagging, worstLag };
+  const isLagging = worstLag >= 2;
+
+  // 月份計算（30 天/月）
+  const round1 = (n: number) => Math.round(n * 10) / 10;
+  const monthsElapsed =
+    effectiveStartDate ? round1(diffDays(effectiveStartDate, todayISO) / 30) : null;
+  // 取上下顎較晚的 estimatedEndDate（較長那顎決定整體療程）
+  const endU = upper.estimatedEndDate;
+  const endL = lower.estimatedEndDate;
+  const latestEnd =
+    endU && endL ? (endU > endL ? endU : endL) : (endU ?? endL ?? null);
+  const monthsRemaining =
+    latestEnd ? Math.max(0, round1(diffDays(todayISO, latestEnd) / 30)) : null;
+  const totalMonths =
+    effectiveStartDate && latestEnd
+      ? round1(diffDays(effectiveStartDate, latestEnd) / 30)
+      : null;
+
+  return {
+    upper,
+    lower,
+    hasAnyData,
+    isLagging,
+    worstLag,
+    cycleDays,
+    effectiveStartDate,
+    monthsElapsed,
+    monthsRemaining,
+    totalMonths,
+  };
 }

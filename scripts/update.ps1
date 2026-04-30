@@ -15,20 +15,40 @@ Write-Host '╚═════════════════════�
 Write-Host ''
 
 # ── 偵測 App 目錄 ──────────────────────────────────────
+# 優先 C:（筆電 = master 慣例），回退 D:
 $appDir = $null
-foreach ($candidate in @('D:\dev\矯正追蹤-app', 'C:\dev\矯正追蹤-app')) {
+foreach ($candidate in @('C:\dev\矯正追蹤-app', 'D:\dev\矯正追蹤-app')) {
     if (Test-Path (Join-Path $candidate '.git')) {
         $appDir = $candidate
         break
     }
 }
 if (-not $appDir) {
-    Write-Host '❌ 找不到 App 目錄（找了 D:\dev\矯正追蹤-app 跟 C:\dev\矯正追蹤-app）' -ForegroundColor Red
+    Write-Host '❌ 找不到 App 目錄（找了 C:\dev\矯正追蹤-app 跟 D:\dev\矯正追蹤-app）' -ForegroundColor Red
     Read-Host '按 Enter 結束'
     exit 1
 }
 Set-Location $appDir
 Write-Host "App 目錄：$appDir" -ForegroundColor Gray
+Write-Host ''
+
+# ── 角色守門：只有 master（筆電）才該從 GitHub 拉更新 ──
+# 開發機（follower）= 程式碼 source of truth，本身在這寫 code 然後 push，
+# 不該反向拉自己剛剛 push 的東西（且工作樹通常有未推送變動）
+$roleFile = Join-Path $appDir 'dev-data\clinic-role.txt'
+$role = 'follower'
+if (Test-Path $roleFile) {
+    $role = (Get-Content $roleFile -Raw -ErrorAction SilentlyContinue).Trim().ToLower()
+}
+if ($role -ne 'master') {
+    Write-Host "⚠️ 此機角色為 $role（開發機），不該從 GitHub 拉更新。" -ForegroundColor Yellow
+    Write-Host '   程式碼從這台寫、push 上 GitHub、再去筆電（master）跑「更新.bat」。' -ForegroundColor Gray
+    Write-Host '   要強制拉：手動跑 git pull 即可。' -ForegroundColor Gray
+    Write-Host ''
+    Read-Host '按 Enter 結束'
+    exit 0
+}
+Write-Host "角色：$role ✓" -ForegroundColor Green
 Write-Host ''
 
 # ── 偵測 Node ─────────────────────────────────────────

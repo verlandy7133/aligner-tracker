@@ -1,4 +1,4 @@
-# 隱形矯正追蹤 — 自動安裝程式
+﻿# 隱形矯正追蹤 — 自動安裝程式
 # 由 安裝.bat 呼叫 (PowerShell)
 #
 # 動作：
@@ -27,6 +27,17 @@ if (-not $BundlePath) {
     $BundlePath = (Get-Item $PSScriptRoot).Parent.FullName
 }
 Write-Host "Bundle 來源：$BundlePath"
+Write-Host ''
+
+# ── 偵測安裝目標碟 ──────────────────────────────────────
+# 優先用 D 槽（vrlndy 主機慣例）；沒 D 槽就用系統碟（C 通常）
+if (Test-Path 'D:\') {
+    $targetDrive = 'D:'
+    Write-Host "  ✓ 找到 D 槽 → 使用 $targetDrive\" -ForegroundColor Green
+} else {
+    $targetDrive = $env:SystemDrive  # 例如 'C:'
+    Write-Host "  ⚠️ 沒有 D 槽 → 自動使用系統碟 $targetDrive\" -ForegroundColor Yellow
+}
 Write-Host ''
 
 # ── 1. 檢查 Node.js ─────────────────────────────────────
@@ -59,7 +70,7 @@ Write-Host "  ✓ Node.js $nodeVer ($nodeExe)" -ForegroundColor Green
 Write-Host ''
 Write-Host '[2/5] 複製 App 程式碼...'
 $srcApp = Join-Path $BundlePath 'app'
-$dstApp = 'D:\dev\矯正追蹤-app'
+$dstApp = Join-Path $targetDrive 'dev\矯正追蹤-app'
 if (-not (Test-Path $srcApp)) {
     Write-Host "❌ 找不到 $srcApp" -ForegroundColor Red
     Read-Host '按 Enter 結束'; exit 1
@@ -77,7 +88,7 @@ Write-Host "  ✓ 複製到 $dstApp" -ForegroundColor Green
 Write-Host ''
 Write-Host '[3/5] 複製病患資料夾...'
 $srcData = Join-Path $BundlePath '矯正資料'
-$dstData = 'D:\矯正'
+$dstData = Join-Path $targetDrive '矯正'
 if (Test-Path $srcData) {
     if (Test-Path $dstData) {
         Write-Host "  ⚠️ $dstData 已存在，跳過 (避免覆蓋現有病患檔)" -ForegroundColor Yellow
@@ -94,9 +105,20 @@ Write-Host ''
 Write-Host '[4/5] 安裝依賴 (1-3 分鐘)...'
 $npmCmd = Join-Path $nodeDir 'npm.cmd'
 Set-Location $dstApp
-& $npmCmd install --silent 2>&1 | Out-Null
+$npmLog = Join-Path $env:TEMP "npm-install-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
+Write-Host "  → log: $npmLog" -ForegroundColor Gray
+# --legacy-peer-deps：vite v8 vs vite-plugin-pwa v1.2 peer 衝突暫繞，等 plugin 升級後可移除
+& $npmCmd install --legacy-peer-deps 2>&1 | Tee-Object -FilePath $npmLog
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "  ❌ npm install 失敗" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  ❌ npm install 失敗 (exit code $LASTEXITCODE)" -ForegroundColor Red
+    Write-Host "  完整 log: $npmLog" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  常見原因 + 對應動作：" -ForegroundColor Cyan
+    Write-Host "    1. 沒網 / 網慢 → 確認連網後重跑" -ForegroundColor White
+    Write-Host "    2. node_modules 殘留 → rmdir /s /q node_modules && del package-lock.json && npm install" -ForegroundColor White
+    Write-Host "    3. path 太長 → git config --system core.longpaths true" -ForegroundColor White
+    Write-Host "    4. npm cache 壞 → npm cache clean --force && npm install" -ForegroundColor White
     Read-Host '按 Enter 結束'; exit 1
 }
 Write-Host '  ✓ npm install 完成' -ForegroundColor Green
@@ -106,9 +128,9 @@ if (Test-Path (Join-Path $dstApp 'dist')) {
     Write-Host '  ✓ dist/ 已存在 (跳過 build)' -ForegroundColor Green
 } else {
     Write-Host '  → 編譯中...'
-    & $npmCmd run build 2>&1 | Out-Null
+    & $npmCmd run build 2>&1 | Tee-Object -FilePath (Join-Path $env:TEMP "npm-build-$(Get-Date -Format 'yyyyMMdd-HHmmss').log")
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "  ❌ build 失敗" -ForegroundColor Red
+        Write-Host "  ❌ build 失敗 (exit code $LASTEXITCODE)" -ForegroundColor Red
         Read-Host '按 Enter 結束'; exit 1
     }
     Write-Host '  ✓ 編譯完成' -ForegroundColor Green

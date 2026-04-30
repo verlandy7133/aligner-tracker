@@ -64,6 +64,39 @@ async function doSeed(): Promise<SeedResult> {
     // 加上自動補建的新 patients
     merged.push(...excelNewPatients);
 
+    // 4. 最終 chartNo 重編：按 earliest orderDate ASC（最早下單 = 0001）
+    //    沒下單的病患（new + Excel 沒抓到的）排在後面，按生日再 fallback 姓名
+    //    同時更新 orders 的 patientChartNo 維持一致
+    const earliestByPatient = new Map<string, string>();
+    for (const order of excelOrders) {
+      const current = earliestByPatient.get(order.patientId);
+      if (order.date && (!current || order.date < current)) {
+        earliestByPatient.set(order.patientId, order.date);
+      }
+    }
+    merged.sort((a, b) => {
+      const da = earliestByPatient.get(a.id) ?? '9999-99-99';
+      const db_ = earliestByPatient.get(b.id) ?? '9999-99-99';
+      if (da !== db_) return da.localeCompare(db_);
+      const ba = a.birthday ?? '9999-99-99';
+      const bb = b.birthday ?? '9999-99-99';
+      if (ba !== bb) return ba.localeCompare(bb);
+      return a.name.localeCompare(b.name, 'zh-Hant');
+    });
+    const chartNoMap = new Map<string, string>();
+    merged.forEach((p, i) => {
+      const newChartNo = String(i + 1).padStart(4, '0');
+      chartNoMap.set(p.id, newChartNo);
+      p.chartNo = newChartNo;
+      // 同時把 patient.orderDate 填上 earliest order（讓列表排序 work）
+      const earliest = earliestByPatient.get(p.id);
+      if (earliest) p.orderDate = earliest;
+    });
+    for (const order of excelOrders) {
+      const newChartNo = chartNoMap.get(order.patientId);
+      if (newChartNo) order.patientChartNo = newChartNo;
+    }
+
     await db.patients.bulkPut(merged);
 
     if (excelOrders.length > 0) {

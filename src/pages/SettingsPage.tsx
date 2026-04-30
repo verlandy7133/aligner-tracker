@@ -618,10 +618,29 @@ function BackupSection() {
 }
 
 /* ─── 掃描資料夾 ─────────────────────────────────────────── */
+type RoleInfo = {
+  role: 'master' | 'follower';
+  drive: string;
+  dataRoot: string;
+  scanFolder: string;
+  scanFolderExists: boolean;
+};
+
 function RescanSection() {
   const [state, setState] = useState<'idle' | 'scanning' | 'done' | 'error'>('idle');
   const [result, setResult] = useState<RescanResult | null>(null);
   const [error, setError] = useState('');
+  const [roleInfo, setRoleInfo] = useState<RoleInfo | null>(null);
+  const [roleError, setRoleError] = useState('');
+
+  useEffect(() => {
+    fetch('http://127.0.0.1:8765/role')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`role endpoint ${r.status}`))))
+      .then((data: RoleInfo) => setRoleInfo(data))
+      .catch((e: unknown) =>
+        setRoleError(e instanceof Error ? e.message : String(e)),
+      );
+  }, []);
 
   async function go() {
     setState('scanning');
@@ -637,18 +656,60 @@ function RescanSection() {
     }
   }
 
+  const isMaster = roleInfo?.role === 'master';
+  const canScan = isMaster && roleInfo?.scanFolderExists === true;
+
   return (
     <section className="rounded-xl border border-zinc-800 bg-zinc-900/30">
       <header className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between">
-        <h2 className="text-sm font-medium text-zinc-200">資料夾掃描</h2>
-        <button onClick={go} disabled={state === 'scanning'} className="px-3 py-1.5 rounded-md text-xs border border-zinc-700 text-zinc-200 hover:bg-zinc-800 transition disabled:opacity-50">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-medium text-zinc-200">資料夾掃描</h2>
+          {roleInfo && (
+            <span
+              className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                isMaster
+                  ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                  : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+              }`}
+            >
+              {roleInfo.role}
+            </span>
+          )}
+        </div>
+        <button
+          onClick={go}
+          disabled={state === 'scanning' || !canScan}
+          className="px-3 py-1.5 rounded-md text-xs border border-zinc-700 text-zinc-200 hover:bg-zinc-800 transition disabled:opacity-40 disabled:cursor-not-allowed"
+        >
           {state === 'scanning' ? '🔄 掃描中…' : '🔄 立即掃描'}
         </button>
       </header>
       <div className="p-5 space-y-2 text-sm">
-        <p className="text-xs text-zinc-500">
-          掃描 <code className="text-zinc-400">D:\矯正\口掃檔 取資料 下單</code> 找新病患資料夾，**只新增不存在的**（用姓名+生日比對），不會動既有編輯。
-        </p>
+        {roleError && (
+          <p className="text-xs text-amber-400/80">
+            ⚠️ 無法取得本機角色（{roleError}）— helper service 沒跑？
+          </p>
+        )}
+        {!roleInfo && !roleError && <p className="text-xs text-zinc-500">讀取本機角色中…</p>}
+        {roleInfo && isMaster && (
+          <p className="text-xs text-zinc-500">
+            掃描 <code className="text-zinc-400">{roleInfo.scanFolder}</code> 找新病患資料夾，
+            <strong className="text-zinc-300">只新增不存在的</strong>（用姓名+生日比對），不會動既有編輯。
+            {!roleInfo.scanFolderExists && (
+              <span className="block mt-1 text-amber-400/80">
+                ⚠️ 上述路徑不存在，無法掃描。請先把 矯正/ 資料夾搬到該位置。
+              </span>
+            )}
+          </p>
+        )}
+        {roleInfo && !isMaster && (
+          <div className="px-3 py-2 rounded-md bg-zinc-800/50 border border-zinc-700 text-xs text-zinc-400 space-y-1">
+            <p>
+              <strong className="text-zinc-300">此機為開發機（follower）</strong>，停用資料夾掃描以免跟筆電 (master) 不同步。
+            </p>
+            <p>新增病患請：在筆電上掃描或手動新增 → 筆電匯出備份 JSON → 在本機「資料備份/還原」section 匯入。</p>
+          </div>
+        )}
         {state === 'done' && result && (
           <div className="px-3 py-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
             ✓ 新增 {result.added} 筆，已存在 {result.skipped} 筆 (共掃 {result.totalScanned})

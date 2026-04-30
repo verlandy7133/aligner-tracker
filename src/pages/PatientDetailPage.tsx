@@ -15,6 +15,7 @@ import {
 } from '../labels';
 import { deriveProgress } from '../lib/progress';
 import PatientFormModal from '../components/PatientFormModal';
+import { callHelper, describeHelperFailure } from '../lib/helper-client';
 
 export default function PatientDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -80,7 +81,33 @@ export default function PatientDetailPage() {
             ))}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {patient.sourceFolder && (
+            <button
+              onClick={async () => {
+                const r = await callHelper('open-folder', patient.sourceFolder);
+                const msg = describeHelperFailure(r);
+                if (msg) alert(msg);
+              }}
+              className="px-3 py-2 rounded-md text-sm border border-amber-500/40 text-amber-300 hover:bg-amber-500/10 transition"
+              title={patient.sourceFolder}
+            >
+              📁 開資料夾
+            </button>
+          )}
+          {patient.hasConsent && patient.consentPdfPath && (
+            <button
+              onClick={async () => {
+                const r = await callHelper('open-file', patient.consentPdfPath!);
+                const msg = describeHelperFailure(r);
+                if (msg) alert(msg);
+              }}
+              className="px-3 py-2 rounded-md text-sm border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10 transition"
+              title={patient.consentPdfPath}
+            >
+              📄 開授權書
+            </button>
+          )}
           <button
             onClick={() => setEditingTarget(patient)}
             className="px-3 py-2 rounded-md text-sm bg-sky-500 text-zinc-950 font-medium hover:bg-sky-400 transition"

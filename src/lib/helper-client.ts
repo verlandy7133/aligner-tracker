@@ -21,6 +21,19 @@ export async function callHelper(endpoint: HelperEndpoint, path: string): Promis
   }
 }
 
+// 在資料夾裡找符合 pattern 的 PDF 並開（用途：指示單 / 轉介單 等動態文件）
+export async function findAndOpenPdf(folder: string, pattern: string): Promise<HelperResult> {
+  try {
+    const url = `${HELPER_BASE}/find-and-open?folder=${encodeURIComponent(folder)}&pattern=${encodeURIComponent(pattern)}`;
+    const resp = await fetch(url);
+    if (resp.ok) return { state: 'opened' };
+    const message = await resp.text();
+    return { state: 'error', message };
+  } catch {
+    return { state: 'helper-down' };
+  }
+}
+
 // 顯示給 user 看的訊息（toast 或 alert 用）
 export function describeHelperFailure(result: HelperResult): string | null {
   if (result.state === 'opened') return null;

@@ -15,7 +15,7 @@ import {
 } from '../labels';
 import { deriveProgress } from '../lib/progress';
 import PatientFormModal from '../components/PatientFormModal';
-import { callHelper, describeHelperFailure } from '../lib/helper-client';
+import { callHelper, findAndOpenPdf, describeHelperFailure } from '../lib/helper-client';
 
 export default function PatientDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -106,6 +106,19 @@ export default function PatientDetailPage() {
               title={patient.consentPdfPath}
             >
               📄 開授權書
+            </button>
+          )}
+          {patient.sourceFolder && (
+            <button
+              onClick={async () => {
+                const r = await findAndOpenPdf(patient.sourceFolder, '指示單');
+                const msg = describeHelperFailure(r);
+                if (msg) alert(msg);
+              }}
+              className="px-3 py-2 rounded-md text-sm border border-violet-500/40 text-violet-300 hover:bg-violet-500/10 transition"
+              title={`在 ${patient.sourceFolder} 找含「指示單」的 PDF`}
+            >
+              📋 開指示單
             </button>
           )}
           <button

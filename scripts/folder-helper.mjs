@@ -111,6 +111,58 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // 在指定資料夾找符合 pattern 的 PDF 並用系統預設程式開（用途：指示單、轉介單等）
+  if (url.pathname === '/find-and-open') {
+    const folder = url.searchParams.get('folder');
+    const pattern = url.searchParams.get('pattern') || '';
+    if (!folder || !pattern) {
+      res.statusCode = 400;
+      res.end('missing folder or pattern');
+      return;
+    }
+    // 路徑 remap：D:\ → 當前 DRIVE（同 open-folder 邏輯）
+    let remapped = folder;
+    if (DRIVE !== 'D:' && /^D:\\/.test(folder)) remapped = DRIVE + folder.slice(2);
+    if (!ALLOWED_ROOTS.some((root) => remapped.startsWith(root))) {
+      res.statusCode = 403;
+      res.end(`folder not in allowlist`);
+      return;
+    }
+    if (!fs.existsSync(remapped)) {
+      res.statusCode = 404;
+      res.end(`folder not found: ${remapped}`);
+      return;
+    }
+    let entries;
+    try {
+      entries = fs.readdirSync(remapped, { withFileTypes: true });
+    } catch (e) {
+      res.statusCode = 500;
+      res.end(`readdir failed: ${e.message}`);
+      return;
+    }
+    const match = entries.find(
+      (f) => f.isFile() && f.name.toLowerCase().endsWith('.pdf') && f.name.includes(pattern),
+    );
+    if (!match) {
+      res.statusCode = 404;
+      res.end(`no PDF matching "${pattern}" in folder`);
+      return;
+    }
+    const filePath = path.join(remapped, match.name);
+    const safe = filePath.replace(/["`]/g, '');
+    const child = spawn('cmd.exe', ['/c', 'start', '""', safe], {
+      detached: true,
+      stdio: 'ignore',
+    });
+    child.on('error', (err) => console.error('[folder-helper] spawn error:', err));
+    child.unref();
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ opened: filePath }));
+    return;
+  }
+
   if (url.pathname === '/open-folder' || url.pathname === '/open-file') {
     const target = url.searchParams.get('path');
     if (!target) {

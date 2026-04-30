@@ -6,7 +6,6 @@ import type { Patient, PatientStatus, ProductLine } from '../types/Patient';
 import PatientFormModal from '../components/PatientFormModal';
 import { derivePatientAlert } from '../config/alerts';
 import { deriveProgress } from '../lib/progress';
-import { callHelper, describeHelperFailure } from '../lib/helper-client';
 import {
   STATUS_LABEL,
   STATUS_BADGE,
@@ -417,21 +416,6 @@ function Row({
           >
             ✎
           </button>
-          {p.sourceFolder && (
-            <button
-              type="button"
-              onClick={async (e) => {
-                e.stopPropagation();
-                const r = await callHelper('open-folder', p.sourceFolder);
-                const msg = describeHelperFailure(r);
-                if (msg) alert(msg);
-              }}
-              className="text-zinc-600 hover:text-amber-300 text-xs"
-              title={`開資料夾：${p.sourceFolder}`}
-            >
-              📁
-            </button>
-          )}
         </div>
         {isMissingOrder && (
           <span
@@ -471,29 +455,11 @@ function Row({
           </span>
         )}
       </td>
-      <td className="px-3 py-2 text-center whitespace-nowrap">
-        {p.hasConsent && p.consentPdfPath ? (
-          <button
-            type="button"
-            onClick={async (e) => {
-              e.stopPropagation();
-              const r = await callHelper('open-file', p.consentPdfPath!);
-              const msg = describeHelperFailure(r);
-              if (msg) alert(msg);
-            }}
-            className="text-emerald-400 hover:text-emerald-300 hover:underline"
-            title={`開授權書 PDF：${p.consentPdfPath}`}
-          >
-            ✓
-          </button>
-        ) : p.hasConsent ? (
-          <span className="text-emerald-400" title="已有授權書（路徑未紀錄）">
-            ✓
-          </span>
+      <td className="px-3 py-2 text-center whitespace-nowrap" title={p.hasConsent ? '已有授權書' : '無授權書'}>
+        {p.hasConsent ? (
+          <span className="text-emerald-400">✓</span>
         ) : (
-          <span className="text-rose-400 font-semibold" title="無授權書">
-            ✗
-          </span>
+          <span className="text-rose-400 font-semibold">✗</span>
         )}
       </td>
       <td

@@ -100,6 +100,7 @@ async function doSeed(): Promise<SeedResult> {
 
     // 5. 從 orders 推 currentAligner（之前 reapplyExcelUpdates 才做、現在 seed 也做）
     //    這樣 fresh-seed 後副數進度條馬上 work，不用 user 再點「重新套用 Excel」
+    //    同時推算精調級別 (refinement-1/2/3)
     if (excelOrders.length > 0) {
       const ordersByPatient = new Map<string, Order[]>();
       for (const o of excelOrders) {
@@ -112,6 +113,14 @@ async function doSeed(): Promise<SeedResult> {
         const derived = deriveCurrentFromOrders(os);
         if (derived.upper != null) p.currentAlignerUpper = derived.upper;
         if (derived.lower != null) p.currentAlignerLower = derived.lower;
+
+        // 精調級別：只升 status === 'active' 的病患（不動 completed / paused / transferred-out）
+        // 規則：order 數 - 1 = 精調級別，cap 在 refinement-3
+        if (p.status === 'active' && os.length >= 2) {
+          const level = Math.min(os.length - 1, 3);
+          p.status =
+            level === 1 ? 'refinement-1' : level === 2 ? 'refinement-2' : 'refinement-3';
+        }
       }
     }
 

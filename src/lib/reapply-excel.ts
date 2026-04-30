@@ -251,6 +251,14 @@ export async function reapplyExcelUpdates(): Promise<ReapplyResult> {
     if (derived.lower != null && derived.lower !== p.currentAlignerLower) {
       fields.currentAlignerLower = derived.lower;
     }
+    // 精調級別：只升 active → refinement-N（不動 completed / paused / transferred-out / 已是 refinement-X）
+    // 規則：order 數 - 1 = 精調級別，cap refinement-3
+    if (p.status === 'active' && os.length >= 2) {
+      const level = Math.min(os.length - 1, 3);
+      const newStatus =
+        level === 1 ? 'refinement-1' : level === 2 ? 'refinement-2' : 'refinement-3';
+      fields.status = newStatus;
+    }
     if (Object.keys(fields).length > 0) {
       await db.patients.update(p.id, { ...fields, updatedAt: nowIso });
       result.derivedCurrent.patientsUpdated++;

@@ -183,12 +183,6 @@ export default function PatientDetailPage() {
             <JawProgressBlock label="上顎" jaw={progress.upper} />
             <JawProgressBlock label="下顎" jaw={progress.lower} />
           </div>
-          {progress.isLagging && (
-            <div className="mt-3 px-3 py-2 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300 text-sm">
-              ⚠ 進度落後 — 預計到第 {progress.upper.expected ?? progress.lower.expected} 副，
-              落後 {progress.worstLag} 副
-            </div>
-          )}
           {!progress.hasAnyData && (
             <p className="text-xs text-zinc-500 mt-3">尚未填總副數，無法推算進度</p>
           )}
@@ -352,17 +346,6 @@ function JawProgressBlock({ label, jaw }: { label: string; jaw: import('../lib/p
         </div>
       )}
       <div className="mt-2 text-xs space-y-0.5">
-        {jaw.expected != null && (
-          <div className="text-zinc-400">
-            預計到第 <span className="text-zinc-200 tabular">{jaw.expected}</span> 副
-            {jaw.lag != null && jaw.lag >= 2 && (
-              <span className="text-rose-400 ml-2">↘ 落後 {jaw.lag} 副</span>
-            )}
-            {jaw.lag != null && jaw.lag <= -1 && (
-              <span className="text-emerald-400 ml-2">↗ 超前 {Math.abs(jaw.lag)} 副</span>
-            )}
-          </div>
-        )}
         {jaw.estimatedEndDate && (
           <div className="text-zinc-500">
             預計完成 {jaw.estimatedEndDate}

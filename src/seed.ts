@@ -115,9 +115,13 @@ async function doSeed(): Promise<SeedResult> {
         if (derived.lower != null) p.currentAlignerLower = derived.lower;
 
         // 精調級別：只升 status === 'active' 的病患（不動 completed / paused / transferred-out）
-        // 規則：order 數 - 1 = 精調級別，cap 在 refinement-3
-        if (p.status === 'active' && os.length >= 2) {
-          const level = Math.min(os.length - 1, 3);
+        // 規則：count(batchType ∈ {新設計, 新設計1}) = 精調級別，cap 在 refinement-3
+        // 「舊」「舊設計」「新」「(空)」不算精調 — 接續做舊設計不算新一輪
+        const refinementCount = os.filter(
+          (o) => o.batchType === '新設計' || o.batchType === '新設計1',
+        ).length;
+        if (p.status === 'active' && refinementCount >= 1) {
+          const level = Math.min(refinementCount, 3);
           p.status =
             level === 1 ? 'refinement-1' : level === 2 ? 'refinement-2' : 'refinement-3';
         }

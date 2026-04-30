@@ -56,26 +56,28 @@ function addDays(from: string, days: number): string {
 function jawProgress(
   total: number | null,
   current: number | null,
-  startDate: string | null,
   cycleDays: number,
   todayISO: string,
 ): JawProgress {
-  const expected =
-    startDate && cycleDays > 0 ? Math.max(0, Math.floor(diffDays(startDate, todayISO) / cycleDays) + 1) : null;
-  // expected 不能超過 total
-  const expectedClamped = expected != null && total != null ? Math.min(expected, total) : expected;
-  const lag = expectedClamped != null && current != null ? expectedClamped - current : null;
+  // 進度百分比：current / total
   const progressPercent =
     current != null && total != null && total > 0 ? Math.round((current / total) * 100) : null;
+
+  // 預計完成日 = 今天 + (剩餘副數 × 一副天數)
+  // 不再從 startDate 推算（接續療程的 startDate 不可信，用實際剩餘進度才準）
+  const remainingAligners =
+    total != null && current != null ? Math.max(0, total - current) : null;
+  const remainingDays =
+    remainingAligners != null && cycleDays > 0 ? remainingAligners * cycleDays : null;
   const estimatedEndDate =
-    startDate && total != null && cycleDays > 0 ? addDays(startDate, cycleDays * total) : null;
-  const daysToEnd = estimatedEndDate ? diffDays(todayISO, estimatedEndDate) : null;
+    remainingDays != null ? addDays(todayISO, remainingDays) : null;
+  const daysToEnd = remainingDays;
 
   return {
     total,
     current,
-    expected: expectedClamped,
-    lag,
+    expected: null, // 不再算「預計到第 N 副」
+    lag: null, // 不再算「超前/落後」
     progressPercent,
     estimatedEndDate,
     daysToEnd,
@@ -84,53 +86,39 @@ function jawProgress(
 
 export function deriveProgress(patient: Patient, todayISO: string): PatientProgress {
   const cycleDays = patient.cycleDays > 0 ? patient.cycleDays : 14;
-  // startDate 多半沒填 → 退到 orderDate 至少有個基準算月份
-  const effectiveStartDate = patient.startDate || patient.orderDate;
-
-  const upper = jawProgress(
-    patient.totalAlignersUpper,
-    patient.currentAlignerUpper,
-    effectiveStartDate,
-    cycleDays,
-    todayISO,
-  );
-  const lower = jawProgress(
-    patient.totalAlignersLower,
-    patient.currentAlignerLower,
-    effectiveStartDate,
-    cycleDays,
-    todayISO,
-  );
+  const upper = jawProgress(patient.totalAlignersUpper, patient.currentAlignerUpper, cycleDays, todayISO);
+  const lower = jawProgress(patient.totalAlignersLower, patient.currentAlignerLower, cycleDays, todayISO);
   const hasAnyData = upper.total != null || lower.total != null;
-  const lagU = upper.lag ?? 0;
-  const lagL = lower.lag ?? 0;
-  const worstLag = Math.max(lagU, lagL);
-  const isLagging = worstLag >= 2;
 
-  // 月份計算（30 天/月）
+  // 月份計算（用「實際進度」而不是日期）：
+  //   已進行 = max(current 上下顎) × cycleDays / 30
+  //   剩餘   = (max(total 上下顎) - max(current)) × cycleDays / 30
+  //   總療程 = max(total 上下顎) × cycleDays / 30
+  // 為什麼不用 startDate / orderDate：接續療程（refinement / 中途轉介）的人
+  //   下單日近、但 current 已經很高 — 用日期算會以為才剛開始。用實際 current 才準。
   const round1 = (n: number) => Math.round(n * 10) / 10;
+  const maxCurrent = Math.max(upper.current ?? 0, lower.current ?? 0);
+  const maxTotal = Math.max(upper.total ?? 0, lower.total ?? 0);
+  const hasCurrent = upper.current != null || lower.current != null;
+  const hasTotal = upper.total != null || lower.total != null;
+
   const monthsElapsed =
-    effectiveStartDate ? round1(diffDays(effectiveStartDate, todayISO) / 30) : null;
-  // 取上下顎較晚的 estimatedEndDate（較長那顎決定整體療程）
-  const endU = upper.estimatedEndDate;
-  const endL = lower.estimatedEndDate;
-  const latestEnd =
-    endU && endL ? (endU > endL ? endU : endL) : (endU ?? endL ?? null);
+    hasCurrent && cycleDays > 0 ? round1((maxCurrent * cycleDays) / 30) : null;
   const monthsRemaining =
-    latestEnd ? Math.max(0, round1(diffDays(todayISO, latestEnd) / 30)) : null;
-  const totalMonths =
-    effectiveStartDate && latestEnd
-      ? round1(diffDays(effectiveStartDate, latestEnd) / 30)
+    hasTotal && cycleDays > 0
+      ? Math.max(0, round1((Math.max(0, maxTotal - maxCurrent) * cycleDays) / 30))
       : null;
+  const totalMonths =
+    hasTotal && cycleDays > 0 ? round1((maxTotal * cycleDays) / 30) : null;
 
   return {
     upper,
     lower,
     hasAnyData,
-    isLagging,
-    worstLag,
+    isLagging: false, // 不再有落後概念（接續療程會誤判）
+    worstLag: 0,
     cycleDays,
-    effectiveStartDate,
+    effectiveStartDate: patient.startDate || patient.orderDate, // 仍保留給其他地方參考
     monthsElapsed,
     monthsRemaining,
     totalMonths,

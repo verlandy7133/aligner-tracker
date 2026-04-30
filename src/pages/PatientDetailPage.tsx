@@ -166,12 +166,12 @@ export default function PatientDetailPage() {
             <Stat
               label="已進行"
               value={progress.monthsElapsed != null ? `${progress.monthsElapsed} 個月` : '—'}
-              hint={!progress.effectiveStartDate ? '需開始日 / 下單日' : undefined}
+              hint={progress.monthsElapsed == null ? '需現在副數' : undefined}
             />
             <Stat
               label="剩餘"
               value={progress.monthsRemaining != null ? `${progress.monthsRemaining} 個月` : '—'}
-              hint={!progress.hasAnyData ? '需總副數' : undefined}
+              hint={progress.monthsRemaining == null ? '需總副數' : undefined}
             />
             <Stat
               label="預計總療程"

@@ -435,12 +435,12 @@ function GroupView({
                 <span className="text-zinc-100 font-medium">{head.patientName}</span>
                 {head.doctor && <DoctorBadge name={head.doctor} />}
                 {patient?.track && (
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] border whitespace-nowrap ${TRACK_BADGE[patient.track]}`}>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border whitespace-nowrap ${TRACK_BADGE[patient.track]}`}>
                     {TRACK_LABEL[patient.track]}
                   </span>
                 )}
                 {patient && patient.refinementLevel >= 1 && patient.refinementLevel <= 3 && (
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] border whitespace-nowrap ${REFINEMENT_BADGE[patient.refinementLevel as 1 | 2 | 3]}`}>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border whitespace-nowrap ${REFINEMENT_BADGE[patient.refinementLevel as 1 | 2 | 3]}`}>
                     {REFINEMENT_LABEL[patient.refinementLevel as 1 | 2 | 3]}
                   </span>
                 )}

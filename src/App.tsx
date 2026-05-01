@@ -23,7 +23,7 @@ export default function App() {
           <Link to="/" className="flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
             <span className="font-semibold text-zinc-100 tracking-tight">隱形矯正追蹤</span>
-            <span className="text-xs text-zinc-500 hidden sm:inline">v0.1.0</span>
+            <span className="text-xs text-zinc-500 hidden sm:inline">v{__APP_VERSION__}</span>
           </Link>
           <div className="flex items-center gap-1">
             <NavItem to="/">病患列表</NavItem>

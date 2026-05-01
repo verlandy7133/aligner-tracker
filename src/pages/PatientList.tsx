@@ -633,7 +633,7 @@ function Badge({ children, className = '' }: { children: React.ReactNode; classN
 function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      <span className="text-xs text-zinc-500 w-12">{label}</span>
+      <span className="text-sm font-medium text-zinc-300 w-14">{label}</span>
       {children}
     </div>
   );
@@ -643,7 +643,7 @@ function FilterRow({ label, children }: { label: string; children: React.ReactNo
 function FilterGroup({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      <span className="text-xs text-zinc-500">{label}</span>
+      <span className="text-sm font-medium text-zinc-300">{label}</span>
       {children}
     </div>
   );

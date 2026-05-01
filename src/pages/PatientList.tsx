@@ -224,7 +224,7 @@ export default function PatientList() {
           ))}
         </FilterRow>
 
-        <FilterRow label="流派">
+        <FilterRow label="設計">
           <Chip
             active={trackFilter.size === 0}
             onClick={() => setTrackFilter(new Set())}

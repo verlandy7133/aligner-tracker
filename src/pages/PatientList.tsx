@@ -332,7 +332,7 @@ export default function PatientList() {
                   current={sortField}
                   dir={sortDir}
                   onClick={toggleSort}
-                  align="right"
+                  align="center"
                 >
                   年齡
                 </SortableTh>
@@ -340,7 +340,7 @@ export default function PatientList() {
                 <Th>狀態</Th>
                 <Th>醫師</Th>
                 <Th align="center">授權書</Th>
-                <Th align="right">進度</Th>
+                <Th align="center">進度</Th>
                 <SortableTh
                   field="orderDate"
                   current={sortField}
@@ -354,6 +354,7 @@ export default function PatientList() {
                   current={sortField}
                   dir={sortDir}
                   onClick={toggleSort}
+                  align="center"
                 >
                   下次回診
                 </SortableTh>
@@ -415,15 +416,15 @@ function SortableTh({
   dir: SortDir;
   onClick: (f: SortField) => void;
   children: React.ReactNode;
-  align?: 'left' | 'right';
+  align?: 'left' | 'right' | 'center';
 }) {
   const active = current === field;
   const arrow = active ? (dir === 'asc' ? '↑' : '↓') : '';
+  const alignClass =
+    align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left';
   return (
     <th
-      className={`font-medium px-3 py-2.5 whitespace-nowrap ${
-        align === 'right' ? 'text-right' : 'text-left'
-      }`}
+      className={`font-medium px-3 py-2.5 whitespace-nowrap ${alignClass}`}
     >
       <button
         type="button"
@@ -504,7 +505,7 @@ function Row({
       >
         {toROCDate(p.birthday) ?? '—'}
       </td>
-      <td className="px-3 py-2 tabular text-right text-zinc-400 whitespace-nowrap">
+      <td className="px-3 py-2 tabular text-center text-zinc-400 whitespace-nowrap">
         {age ?? '—'}
       </td>
       <td className="px-3 py-2 whitespace-nowrap">
@@ -545,11 +546,11 @@ function Row({
         )}
       </td>
       <td
-        className="px-3 py-2 tabular text-zinc-400 whitespace-nowrap leading-tight"
+        className="px-3 py-2 tabular text-center text-zinc-400 whitespace-nowrap leading-tight"
         title={lagTooltip}
       >
         {upper || lower ? (
-          <div className="text-xs space-y-0.5">
+          <div className="text-xs space-y-0.5 inline-block text-left">
             <JawMiniBar label="上" text={upper} jaw={progress.upper} />
             <JawMiniBar label="下" text={lower} jaw={progress.lower} />
           </div>
@@ -558,7 +559,7 @@ function Row({
         )}
       </td>
       <td className="px-3 py-2 tabular text-zinc-400 whitespace-nowrap">{p.orderDate ?? '—'}</td>
-      <td className="px-3 py-2 tabular text-zinc-400 whitespace-nowrap">{p.nextVisit ?? '—'}</td>
+      <td className="px-3 py-2 tabular text-center text-zinc-400 whitespace-nowrap">{p.nextVisit ?? '—'}</td>
       <td className="px-3 py-2 max-w-[320px]">
         <div className="flex flex-wrap items-center gap-1">
           {p.flags.map((f) => (

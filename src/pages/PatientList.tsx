@@ -205,81 +205,85 @@ export default function PatientList() {
           </div>
         </div>
 
-        <FilterRow label="狀態">
-          <Chip
-            active={statusFilter.size === 0}
-            onClick={() => setStatusFilter(new Set())}
-            label="全部"
-            count={counts.status.all}
-          />
-          {(['active', 'paused', 'completed', 'transferred-out'] as PatientStatus[]).map((s) => (
+        {/* Row 1: 狀態 + 品牌 */}
+        <div className="flex items-start gap-x-5 gap-y-2 flex-wrap">
+          <FilterGroup label="狀態">
             <Chip
-              key={s}
-              active={statusFilter.has(s)}
-              onClick={() => toggleSetFilter(setStatusFilter, s)}
-              label={STATUS_LABEL[s]}
-              count={counts.status[s] || 0}
-              activeClass={STATUS_BADGE[s]}
+              active={statusFilter.size === 0}
+              onClick={() => setStatusFilter(new Set())}
+              label="全部"
+              count={counts.status.all}
             />
-          ))}
-        </FilterRow>
+            {(['active', 'paused', 'completed', 'transferred-out'] as PatientStatus[]).map((s) => (
+              <Chip
+                key={s}
+                active={statusFilter.has(s)}
+                onClick={() => toggleSetFilter(setStatusFilter, s)}
+                label={STATUS_LABEL[s]}
+                count={counts.status[s] || 0}
+                activeClass={STATUS_BADGE[s]}
+              />
+            ))}
+          </FilterGroup>
+          <FilterGroup label="品牌">
+            <Chip
+              active={plFilter === 'all'}
+              onClick={() => setPlFilter('all')}
+              label="全部"
+              count={counts.pl.all}
+            />
+            {(['riyue', 'invisalign', 'zenyum', 'retainer'] as ProductLine[]).map((pl) => (
+              <Chip
+                key={pl}
+                active={plFilter === pl}
+                onClick={() => setPlFilter(pl)}
+                label={PRODUCT_LINE_LABEL[pl]}
+                count={counts.pl[pl] || 0}
+                activeClass={PRODUCT_LINE_BADGE[pl]}
+              />
+            ))}
+          </FilterGroup>
+        </div>
 
-        <FilterRow label="設計">
-          <Chip
-            active={trackFilter.size === 0}
-            onClick={() => setTrackFilter(new Set())}
-            label="全部"
-            count={patients.length}
-          />
-          {(['new-design', 'old-design'] as NonNullable<PatientTrack>[]).map((t) => (
+        {/* Row 2: 設計 + 精調 */}
+        <div className="flex items-start gap-x-5 gap-y-2 flex-wrap">
+          <FilterGroup label="設計">
             <Chip
-              key={t}
-              active={trackFilter.has(t)}
-              onClick={() => toggleSetFilter(setTrackFilter, t)}
-              label={TRACK_LABEL[t]}
-              count={counts.track[t] || 0}
-              activeClass={TRACK_BADGE[t]}
+              active={trackFilter.size === 0}
+              onClick={() => setTrackFilter(new Set())}
+              label="全部"
+              count={patients.length}
             />
-          ))}
-        </FilterRow>
-
-        <FilterRow label="精調">
-          <Chip
-            active={refinementFilter.size === 0}
-            onClick={() => setRefinementFilter(new Set())}
-            label="全部"
-            count={patients.length}
-          />
-          {([1, 2, 3] as const).map((n) => (
+            {(['new-design', 'old-design'] as NonNullable<PatientTrack>[]).map((t) => (
+              <Chip
+                key={t}
+                active={trackFilter.has(t)}
+                onClick={() => toggleSetFilter(setTrackFilter, t)}
+                label={TRACK_LABEL[t]}
+                count={counts.track[t] || 0}
+                activeClass={TRACK_BADGE[t]}
+              />
+            ))}
+          </FilterGroup>
+          <FilterGroup label="精調">
             <Chip
-              key={n}
-              active={refinementFilter.has(n)}
-              onClick={() => toggleSetFilter(setRefinementFilter, n)}
-              label={REFINEMENT_LABEL[n]}
-              count={counts.refinement[n] || 0}
-              activeClass={REFINEMENT_BADGE[n]}
+              active={refinementFilter.size === 0}
+              onClick={() => setRefinementFilter(new Set())}
+              label="全部"
+              count={patients.length}
             />
-          ))}
-        </FilterRow>
-
-        <FilterRow label="品牌">
-          <Chip
-            active={plFilter === 'all'}
-            onClick={() => setPlFilter('all')}
-            label="全部"
-            count={counts.pl.all}
-          />
-          {(['riyue', 'invisalign', 'zenyum', 'retainer'] as ProductLine[]).map((pl) => (
-            <Chip
-              key={pl}
-              active={plFilter === pl}
-              onClick={() => setPlFilter(pl)}
-              label={PRODUCT_LINE_LABEL[pl]}
-              count={counts.pl[pl] || 0}
-              activeClass={PRODUCT_LINE_BADGE[pl]}
-            />
-          ))}
-        </FilterRow>
+            {([1, 2, 3] as const).map((n) => (
+              <Chip
+                key={n}
+                active={refinementFilter.has(n)}
+                onClick={() => toggleSetFilter(setRefinementFilter, n)}
+                label={REFINEMENT_LABEL[n]}
+                count={counts.refinement[n] || 0}
+                activeClass={REFINEMENT_BADGE[n]}
+              />
+            ))}
+          </FilterGroup>
+        </div>
 
         <FilterRow label="警示">
           <button
@@ -630,6 +634,16 @@ function FilterRow({ label, children }: { label: string; children: React.ReactNo
   return (
     <div className="flex items-center gap-2 flex-wrap">
       <span className="text-xs text-zinc-500 w-12">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+// 一個 row 內並排多個 group 用（label 緊跟 chips、不固定寬）
+function FilterGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="text-xs text-zinc-500">{label}</span>
       {children}
     </div>
   );

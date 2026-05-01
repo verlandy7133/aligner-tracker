@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.1.3 — 2026-05-01
+
+UI 細修 + 狀態系統重構（拆成兩軸：臨床狀態 / 設計+精調）+ 接續療程友善的進度計算 + 一鍵更新.bat。
+
+### 新增
+
+- **一鍵更新.bat**（`scripts/update.ps1` + 根目錄 `更新.bat`）：master 端雙擊就 git pull + npm install (依需要) + npm run build。follower 模式拒跑（開發機從這邊 push、不該反向 pull）。
+- **詳細頁 4 顆按鈕**：✎ 編輯 / 📁 開資料夾 / 📄 開授權書（有檔才顯示）/ 📋 開指示單（動態 readdir 找 PDF）。helper 新 endpoint `/find-and-open?folder=&pattern=` 給「指示單」這類動態文件。
+- **副數進度卡 4 格時間摘要**：一副要帶 / 已進行 / 剩餘 / 預計總療程。
+- **狀態系統拆兩軸**：
+  - PatientStatus 砍回 4 個值（active / paused / completed / transferred-out），refinement-X 不再放這
+  - 新增 `track`：'new-design' | 'old-design' | null（第一筆 order batchType 決定）
+  - 新增 `refinementLevel`：0-3（第二筆+ 又出現「新設計/新設計1」的次數）
+- **PatientList filter row × 3** 全多選：狀態 / 設計 / 精調。狀態欄顯示 badge 串。
+- **分頁標題**：`--app` → `矯正追蹤系統`。
+- **nav 版本號自動跟隨 package.json**（vite define `__APP_VERSION__`），未來 bump 不用改兩處。
+
+### 修正
+
+- **接續療程的進度計算**：放棄 startDate/orderDate，改用實際 current 副數推算（已進行 = max(current) × cycleDays / 30）。對接續/精調病患不再誤判。
+- **移除「預計到第 N 副 / 超前 / 落後」**：接續療程會誤判，UI 拿掉。
+- **DEFAULT_CYCLE_DAYS 從 10 改 14**（兩週符合臨床慣例）。
+- **chartNo 重編**：seed.ts 在 import 完後按 earliest orderDate ASC 編，解決 0137/0139 撞號。
+- **seed 完從 orders 推 currentAligner**：之前要點「重新套用 Excel」才會推算、副數進度條不顯示，現在 fresh seed 就 work。
+- **cycleDays 預設值同步**：types/scan/import-excel/import-supp 4 處統一 14。
+- **PatientList 表格對齊**：年齡 / 進度 / 下次回診 / 授權書 改置中。
+- **PatientList filter useMemo deps bug**：trackFilter / refinementFilter 沒進 deps，filter 改不更新，已補上。
+
 ## v0.1.2 — 2026-05-01
 
 兩台機器架構正式化 + 病患資料夾扁平化 + 全 IndexedDB 重建。為了讓筆電變正式 master、開發機降為 follower，這版做了基礎建設。

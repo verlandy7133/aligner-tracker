@@ -340,7 +340,7 @@ export default function PatientList() {
                 >
                   年齡
                 </SortableTh>
-                <Th>品牌</Th>
+                <Th align="center">品牌</Th>
                 <Th>狀態</Th>
                 <Th>醫師</Th>
                 <Th align="center">授權書</Th>
@@ -512,7 +512,7 @@ function Row({
       <td className="px-3 py-2 tabular text-center text-zinc-400 whitespace-nowrap">
         {age ?? '—'}
       </td>
-      <td className="px-3 py-2 whitespace-nowrap">
+      <td className="px-3 py-2 text-center whitespace-nowrap">
         <Badge className={PRODUCT_LINE_BADGE[p.productLine]}>
           {PRODUCT_LINE_LABEL[p.productLine]}
         </Badge>

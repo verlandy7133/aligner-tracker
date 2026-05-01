@@ -24,7 +24,8 @@ const DEFAULT_SORT: { field: SortField; dir: SortDir } = { field: 'orderDate', d
 
 export default function PatientList() {
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<PatientStatus | 'all'>('all');
+  // 狀態複選：空 set = 全部；有元素 = 只看這幾個狀態
+  const [statusFilter, setStatusFilter] = useState<Set<PatientStatus>>(new Set());
   const [plFilter, setPlFilter] = useState<ProductLine | 'all'>('all');
   const [sortField, setSortField] = useState<SortField>(DEFAULT_SORT.field);
   const [sortDir, setSortDir] = useState<SortDir>(DEFAULT_SORT.dir);
@@ -77,12 +78,21 @@ export default function PatientList() {
   }, [patients]);
 
   const isFiltered =
-    statusFilter !== 'all' || plFilter !== 'all' || search.trim() !== '';
+    statusFilter.size > 0 || plFilter !== 'all' || search.trim() !== '';
 
   function resetFilters() {
     setSearch('');
-    setStatusFilter('all');
+    setStatusFilter(new Set());
     setPlFilter('all');
+  }
+
+  function toggleStatusFilter(s: PatientStatus) {
+    setStatusFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
   }
 
   function toggleSort(field: SortField) {
@@ -98,7 +108,7 @@ export default function PatientList() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     let r = patients.filter((p) => {
-      if (statusFilter !== 'all' && p.status !== statusFilter) return false;
+      if (statusFilter.size > 0 && !statusFilter.has(p.status)) return false;
       if (plFilter !== 'all' && p.productLine !== plFilter) return false;
       if (missingOrderOnly && !missingOrderIds.has(p.id)) return false;
       if (missingDoctorOnly && !missingDoctorIds.has(p.id)) return false;
@@ -173,16 +183,16 @@ export default function PatientList() {
 
         <FilterRow label="狀態">
           <Chip
-            active={statusFilter === 'all'}
-            onClick={() => setStatusFilter('all')}
+            active={statusFilter.size === 0}
+            onClick={() => setStatusFilter(new Set())}
             label="全部"
             count={counts.status.all}
           />
           {(['active', 'refinement-1', 'refinement-2', 'refinement-3', 'paused', 'completed', 'transferred-out'] as PatientStatus[]).map((s) => (
             <Chip
               key={s}
-              active={statusFilter === s}
-              onClick={() => setStatusFilter(s)}
+              active={statusFilter.has(s)}
+              onClick={() => toggleStatusFilter(s)}
               label={STATUS_LABEL[s]}
               count={counts.status[s] || 0}
               activeClass={STATUS_BADGE[s]}

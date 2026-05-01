@@ -222,6 +222,8 @@ const patients = collected.map((p, i) => ({
   birthday: p.birthday,
   productLine: p.productLine,
   status: p.status,
+  track: null, // 流派由 seed.ts 從 orders 推
+  refinementLevel: 0, // 同上
   orderDate: null, // 新結構沒日期父層，由 App 從 Order 推
   startDate: null,
   totalAlignersUpper: null,

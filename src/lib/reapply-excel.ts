@@ -243,6 +243,7 @@ export async function reapplyExcelUpdates(): Promise<ReapplyResult> {
   for (const p of refreshedPatients) {
     const os = ordersByPid.get(p.id) ?? [];
     if (!os.length) continue;
+
     const derived = deriveCurrentFromOrders(os);
     const fields: Partial<Patient> = {};
     if (derived.upper != null && derived.upper !== p.currentAlignerUpper) {
@@ -251,18 +252,23 @@ export async function reapplyExcelUpdates(): Promise<ReapplyResult> {
     if (derived.lower != null && derived.lower !== p.currentAlignerLower) {
       fields.currentAlignerLower = derived.lower;
     }
-    // 精調級別：只升 active → refinement-N（不動 completed / paused / transferred-out / 已是 refinement-X）
-    // 規則：count(batchType ∈ {新設計, 新設計1}) = 精調級別，cap refinement-3
-    // 「舊」「舊設計」「新」「(空)」不算精調 — 接續做舊設計不算新一輪
-    const refinementCount = os.filter(
-      (o) => o.batchType === '新設計' || o.batchType === '新設計1',
-    ).length;
-    if (p.status === 'active' && refinementCount >= 1) {
-      const level = Math.min(refinementCount, 3);
-      const newStatus =
-        level === 1 ? 'refinement-1' : level === 2 ? 'refinement-2' : 'refinement-3';
-      fields.status = newStatus;
-    }
+
+    // track（流派）：第一筆 order batchType 決定
+    const sorted = [...os].sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''));
+    const firstBatch = sorted[0]?.batchType ?? '';
+    let newTrack: Patient['track'];
+    if (firstBatch === '新設計' || firstBatch === '新設計1') newTrack = 'new-design';
+    else if (firstBatch === '舊設計' || firstBatch === '舊') newTrack = 'old-design';
+    else newTrack = null;
+    if (newTrack !== p.track) fields.track = newTrack;
+
+    // 精調次數：從第二筆開始算「新設計/新設計1」出現幾次
+    const refinementCount = sorted
+      .slice(1)
+      .filter((o) => o.batchType === '新設計' || o.batchType === '新設計1').length;
+    const newLevel = Math.min(refinementCount, 3) as 0 | 1 | 2 | 3;
+    if (newLevel !== p.refinementLevel) fields.refinementLevel = newLevel;
+
     if (Object.keys(fields).length > 0) {
       await db.patients.update(p.id, { ...fields, updatedAt: nowIso });
       result.derivedCurrent.patientsUpdated++;

@@ -98,9 +98,11 @@ async function doSeed(): Promise<SeedResult> {
       if (newChartNo) order.patientChartNo = newChartNo;
     }
 
-    // 5. 從 orders 推 currentAligner（之前 reapplyExcelUpdates 才做、現在 seed 也做）
-    //    這樣 fresh-seed 後副數進度條馬上 work，不用 user 再點「重新套用 Excel」
-    //    同時推算精調級別 (refinement-1/2/3)
+    // 5. 從 orders 推 currentAligner + track + refinementLevel
+    //    track（流派）：第一筆 order 的 batchType 決定
+    //      新設計/新設計1 → new-design / 舊設計/舊 → old-design / 新/(空) → null
+    //    refinementLevel（精調次數）：第二筆+ 又出現「新設計/新設計1」的次數，cap 3
+    //    status：保持 'active' / 'paused' / 'completed' / 'transferred-out' 不動（精調不再放這裡）
     if (excelOrders.length > 0) {
       const ordersByPatient = new Map<string, Order[]>();
       for (const o of excelOrders) {
@@ -110,21 +112,23 @@ async function doSeed(): Promise<SeedResult> {
       for (const p of merged) {
         const os = ordersByPatient.get(p.id);
         if (!os || os.length === 0) continue;
+
         const derived = deriveCurrentFromOrders(os);
         if (derived.upper != null) p.currentAlignerUpper = derived.upper;
         if (derived.lower != null) p.currentAlignerLower = derived.lower;
 
-        // 精調級別：只升 status === 'active' 的病患（不動 completed / paused / transferred-out）
-        // 規則：count(batchType ∈ {新設計, 新設計1}) = 精調級別，cap 在 refinement-3
-        // 「舊」「舊設計」「新」「(空)」不算精調 — 接續做舊設計不算新一輪
-        const refinementCount = os.filter(
-          (o) => o.batchType === '新設計' || o.batchType === '新設計1',
-        ).length;
-        if (p.status === 'active' && refinementCount >= 1) {
-          const level = Math.min(refinementCount, 3);
-          p.status =
-            level === 1 ? 'refinement-1' : level === 2 ? 'refinement-2' : 'refinement-3';
-        }
+        // 按日期排序找第一筆
+        const sorted = [...os].sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''));
+        const firstBatch = sorted[0]?.batchType ?? '';
+        if (firstBatch === '新設計' || firstBatch === '新設計1') p.track = 'new-design';
+        else if (firstBatch === '舊設計' || firstBatch === '舊') p.track = 'old-design';
+        else p.track = null;
+
+        // 精調次數：從第二筆開始算「新設計/新設計1」出現幾次
+        const refinementCount = sorted
+          .slice(1)
+          .filter((o) => o.batchType === '新設計' || o.batchType === '新設計1').length;
+        p.refinementLevel = Math.min(refinementCount, 3) as 0 | 1 | 2 | 3;
       }
     }
 

@@ -422,7 +422,7 @@ export default function PatientFormModal({ target, prefillName, onClose }: Patie
                 }
                 className={inputCls}
               >
-                {(['active', 'refinement-1', 'refinement-2', 'refinement-3', 'paused', 'completed', 'transferred-out'] as PatientStatus[]).map(
+                {(['active', 'paused', 'completed', 'transferred-out'] as PatientStatus[]).map(
                   (s) => (
                     <option key={s} value={s}>
                       {STATUS_LABEL[s]}

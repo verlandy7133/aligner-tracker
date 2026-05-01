@@ -54,12 +54,7 @@ export type PatientAlert = {
   message: string;
 };
 
-const PATIENT_ACTIVE_STATUSES = new Set([
-  'active',
-  'refinement-1',
-  'refinement-2',
-  'refinement-3',
-]);
+const PATIENT_ACTIVE_STATUSES = new Set(['active']);
 
 function daysBetween(a: string, b: string): number {
   const ad = new Date(a).getTime();

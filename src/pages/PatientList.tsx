@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../db';
-import type { Patient, PatientStatus, ProductLine } from '../types/Patient';
+import type { Patient, PatientStatus, PatientTrack, ProductLine } from '../types/Patient';
 import PatientFormModal from '../components/PatientFormModal';
 import { derivePatientAlert } from '../config/alerts';
 import { deriveProgress } from '../lib/progress';
@@ -11,6 +11,10 @@ import {
   STATUS_BADGE,
   PRODUCT_LINE_LABEL,
   PRODUCT_LINE_BADGE,
+  TRACK_LABEL,
+  TRACK_BADGE,
+  REFINEMENT_LABEL,
+  REFINEMENT_BADGE,
   FLAG_LABEL,
   FLAG_BADGE,
   calcAge,
@@ -24,8 +28,10 @@ const DEFAULT_SORT: { field: SortField; dir: SortDir } = { field: 'orderDate', d
 
 export default function PatientList() {
   const [search, setSearch] = useState('');
-  // 狀態複選：空 set = 全部；有元素 = 只看這幾個狀態
+  // 多選 filter：空 set = 全部
   const [statusFilter, setStatusFilter] = useState<Set<PatientStatus>>(new Set());
+  const [trackFilter, setTrackFilter] = useState<Set<NonNullable<PatientTrack>>>(new Set());
+  const [refinementFilter, setRefinementFilter] = useState<Set<1 | 2 | 3>>(new Set());
   const [plFilter, setPlFilter] = useState<ProductLine | 'all'>('all');
   const [sortField, setSortField] = useState<SortField>(DEFAULT_SORT.field);
   const [sortDir, setSortDir] = useState<SortDir>(DEFAULT_SORT.dir);
@@ -70,27 +76,39 @@ export default function PatientList() {
   const counts = useMemo(() => {
     const status: Record<string, number> = { all: patients.length };
     const pl: Record<string, number> = { all: patients.length };
+    const track: Record<string, number> = { 'new-design': 0, 'old-design': 0, none: 0 };
+    const refinement: Record<string, number> = { 1: 0, 2: 0, 3: 0 };
     for (const p of patients) {
       status[p.status] = (status[p.status] || 0) + 1;
       pl[p.productLine] = (pl[p.productLine] || 0) + 1;
+      if (p.track === 'new-design') track['new-design']++;
+      else if (p.track === 'old-design') track['old-design']++;
+      else track.none++;
+      if (p.refinementLevel >= 1 && p.refinementLevel <= 3) refinement[p.refinementLevel]++;
     }
-    return { status, pl };
+    return { status, pl, track, refinement };
   }, [patients]);
 
   const isFiltered =
-    statusFilter.size > 0 || plFilter !== 'all' || search.trim() !== '';
+    statusFilter.size > 0 ||
+    trackFilter.size > 0 ||
+    refinementFilter.size > 0 ||
+    plFilter !== 'all' ||
+    search.trim() !== '';
 
   function resetFilters() {
     setSearch('');
     setStatusFilter(new Set());
+    setTrackFilter(new Set());
+    setRefinementFilter(new Set());
     setPlFilter('all');
   }
 
-  function toggleStatusFilter(s: PatientStatus) {
-    setStatusFilter((prev) => {
+  function toggleSetFilter<T>(setter: React.Dispatch<React.SetStateAction<Set<T>>>, value: T) {
+    setter((prev) => {
       const next = new Set(prev);
-      if (next.has(s)) next.delete(s);
-      else next.add(s);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
       return next;
     });
   }
@@ -109,6 +127,12 @@ export default function PatientList() {
     const q = search.trim().toLowerCase();
     let r = patients.filter((p) => {
       if (statusFilter.size > 0 && !statusFilter.has(p.status)) return false;
+      if (trackFilter.size > 0) {
+        if (p.track === null || !trackFilter.has(p.track)) return false;
+      }
+      if (refinementFilter.size > 0) {
+        if (p.refinementLevel === 0 || !refinementFilter.has(p.refinementLevel as 1 | 2 | 3)) return false;
+      }
       if (plFilter !== 'all' && p.productLine !== plFilter) return false;
       if (missingOrderOnly && !missingOrderIds.has(p.id)) return false;
       if (missingDoctorOnly && !missingDoctorIds.has(p.id)) return false;
@@ -145,7 +169,7 @@ export default function PatientList() {
       }
     });
     return r;
-  }, [patients, search, statusFilter, plFilter, sortField, sortDir, missingOrderOnly, missingOrderIds, missingDoctorOnly, missingDoctorIds]);
+  }, [patients, search, statusFilter, trackFilter, refinementFilter, plFilter, sortField, sortDir, missingOrderOnly, missingOrderIds, missingDoctorOnly, missingDoctorIds]);
 
   return (
     <div className="space-y-5">
@@ -188,14 +212,52 @@ export default function PatientList() {
             label="全部"
             count={counts.status.all}
           />
-          {(['active', 'refinement-1', 'refinement-2', 'refinement-3', 'paused', 'completed', 'transferred-out'] as PatientStatus[]).map((s) => (
+          {(['active', 'paused', 'completed', 'transferred-out'] as PatientStatus[]).map((s) => (
             <Chip
               key={s}
               active={statusFilter.has(s)}
-              onClick={() => toggleStatusFilter(s)}
+              onClick={() => toggleSetFilter(setStatusFilter, s)}
               label={STATUS_LABEL[s]}
               count={counts.status[s] || 0}
               activeClass={STATUS_BADGE[s]}
+            />
+          ))}
+        </FilterRow>
+
+        <FilterRow label="流派">
+          <Chip
+            active={trackFilter.size === 0}
+            onClick={() => setTrackFilter(new Set())}
+            label="全部"
+            count={patients.length}
+          />
+          {(['new-design', 'old-design'] as NonNullable<PatientTrack>[]).map((t) => (
+            <Chip
+              key={t}
+              active={trackFilter.has(t)}
+              onClick={() => toggleSetFilter(setTrackFilter, t)}
+              label={TRACK_LABEL[t]}
+              count={counts.track[t] || 0}
+              activeClass={TRACK_BADGE[t]}
+            />
+          ))}
+        </FilterRow>
+
+        <FilterRow label="精調">
+          <Chip
+            active={refinementFilter.size === 0}
+            onClick={() => setRefinementFilter(new Set())}
+            label="全部"
+            count={patients.length}
+          />
+          {([1, 2, 3] as const).map((n) => (
+            <Chip
+              key={n}
+              active={refinementFilter.has(n)}
+              onClick={() => toggleSetFilter(setRefinementFilter, n)}
+              label={REFINEMENT_LABEL[n]}
+              count={counts.refinement[n] || 0}
+              activeClass={REFINEMENT_BADGE[n]}
             />
           ))}
         </FilterRow>
@@ -451,7 +513,17 @@ function Row({
         </Badge>
       </td>
       <td className="px-3 py-2 whitespace-nowrap">
-        <Badge className={STATUS_BADGE[p.status]}>{STATUS_LABEL[p.status]}</Badge>
+        <div className="inline-flex items-center gap-1 flex-wrap">
+          <Badge className={STATUS_BADGE[p.status]}>{STATUS_LABEL[p.status]}</Badge>
+          {p.track && (
+            <Badge className={TRACK_BADGE[p.track]}>{TRACK_LABEL[p.track]}</Badge>
+          )}
+          {p.refinementLevel >= 1 && p.refinementLevel <= 3 && (
+            <Badge className={REFINEMENT_BADGE[p.refinementLevel as 1 | 2 | 3]}>
+              {REFINEMENT_LABEL[p.refinementLevel as 1 | 2 | 3]}
+            </Badge>
+          )}
+        </div>
       </td>
       <td className="px-3 py-2 whitespace-nowrap">
         {p.doctor && p.doctor.trim() ? (

@@ -212,6 +212,8 @@ def main():
                 'birthday': hint_birthday,
                 'productLine': 'riyue',  # 預設日月辰心
                 'status': 'active',
+                'track': None,  # 由 seed.ts 從 orders 推
+                'refinementLevel': 0,  # 同上
                 'orderDate': head['date'],
                 'startDate': None,
                 'totalAlignersUpper': upper_t,

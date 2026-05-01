@@ -7,14 +7,14 @@ export const PRODUCT_LINE_LABEL: Record<ProductLine, string> = {
   retainer: '維持器',
 };
 
-export type PatientStatus =
-  | 'active'
-  | 'refinement-1'
-  | 'refinement-2'
-  | 'refinement-3'
-  | 'paused'
-  | 'completed'
-  | 'transferred-out';
+// 臨床狀態：4 個值（精調級別已拆出去成 refinementLevel）
+export type PatientStatus = 'active' | 'paused' | 'completed' | 'transferred-out';
+
+// 流派（供應商倒閉事件後分類）：第一筆 order 的 batchType 決定
+//   新設計  ← 第一筆 = 新設計 / 新設計1（比對失敗、重做療程）
+//   舊設計  ← 第一筆 = 舊設計 / 舊（比對成功、繼續用舊資料）
+//   null   ← 第一筆 = 新 / (空) 或無 order（看不出來、不分類）
+export type PatientTrack = 'new-design' | 'old-design' | null;
 
 export type PatientFlag =
   | 'needs-payment'
@@ -29,6 +29,8 @@ export type Patient = {
 
   productLine: ProductLine;
   status: PatientStatus;
+  track: PatientTrack; // 新設計 / 舊設計 / 不分類
+  refinementLevel: 0 | 1 | 2 | 3; // 第二筆+ 又出現「新設計」batchType 的次數，cap 3
 
   orderDate: string | null;
   startDate: string | null;

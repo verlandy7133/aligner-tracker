@@ -8,6 +8,10 @@ import {
   STATUS_BADGE,
   PRODUCT_LINE_LABEL,
   PRODUCT_LINE_BADGE,
+  TRACK_LABEL,
+  TRACK_BADGE,
+  REFINEMENT_LABEL,
+  REFINEMENT_BADGE,
   FLAG_LABEL,
   FLAG_BADGE,
   calcAge,
@@ -60,6 +64,14 @@ export default function PatientDetailPage() {
               {PRODUCT_LINE_LABEL[patient.productLine]}
             </Badge>
             <Badge className={STATUS_BADGE[patient.status]}>{STATUS_LABEL[patient.status]}</Badge>
+            {patient.track && (
+              <Badge className={TRACK_BADGE[patient.track]}>{TRACK_LABEL[patient.track]}</Badge>
+            )}
+            {patient.refinementLevel >= 1 && patient.refinementLevel <= 3 && (
+              <Badge className={REFINEMENT_BADGE[patient.refinementLevel as 1 | 2 | 3]}>
+                {REFINEMENT_LABEL[patient.refinementLevel as 1 | 2 | 3]}
+              </Badge>
+            )}
             {patient.doctor && (
               <Badge className="bg-zinc-700/30 text-zinc-300 border-zinc-700">
                 醫師：{patient.doctor}

@@ -223,6 +223,8 @@ def main():
                     'birthday': hint_birthday,
                     'productLine': 'riyue',
                     'status': 'active',
+                    'track': None,
+                    'refinementLevel': 0,
                     'orderDate': row['date'],
                     'startDate': None,
                     'totalAlignersUpper': None,

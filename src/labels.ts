@@ -1,4 +1,4 @@
-import type { PatientFlag, PatientStatus, ProgressStatus } from './types/Patient';
+import type { PatientFlag, PatientStatus, PatientTrack, ProgressStatus } from './types/Patient';
 
 // ─── 下單進度 ───────────────────────────────────────────────
 export const PROGRESS_BADGE: Record<ProgressStatus, string> = {
@@ -20,9 +20,6 @@ export { PRODUCT_LINE_LABEL } from './types/Patient';
 
 export const STATUS_LABEL: Record<PatientStatus, string> = {
   active: '治療中',
-  'refinement-1': '精調 1',
-  'refinement-2': '精調 2',
-  'refinement-3': '精調 3',
   paused: '中斷',
   completed: '完成',
   'transferred-out': '已轉出',
@@ -30,12 +27,33 @@ export const STATUS_LABEL: Record<PatientStatus, string> = {
 
 export const STATUS_BADGE: Record<PatientStatus, string> = {
   active: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
-  'refinement-1': 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
-  'refinement-2': 'bg-teal-500/15 text-teal-300 border-teal-500/30',
-  'refinement-3': 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30',
   paused: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
   completed: 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30',
   'transferred-out': 'bg-rose-500/15 text-rose-300 border-rose-500/30',
+};
+
+// ─── 流派（供應商倒閉事件後分類）────────────────────────
+export const TRACK_LABEL: Record<NonNullable<PatientTrack>, string> = {
+  'new-design': '新設計',
+  'old-design': '舊設計',
+};
+
+export const TRACK_BADGE: Record<NonNullable<PatientTrack>, string> = {
+  'new-design': 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
+  'old-design': 'bg-teal-500/15 text-teal-300 border-teal-500/30',
+};
+
+// ─── 精調級別 ────────────────────────────────────────
+export const REFINEMENT_LABEL: Record<1 | 2 | 3, string> = {
+  1: '精調 一',
+  2: '精調 二',
+  3: '精調 三+',
+};
+
+export const REFINEMENT_BADGE: Record<1 | 2 | 3, string> = {
+  1: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30',
+  2: 'bg-violet-500/15 text-violet-300 border-violet-500/30',
+  3: 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30',
 };
 
 export const PRODUCT_LINE_BADGE = {

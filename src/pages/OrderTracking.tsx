@@ -10,7 +10,7 @@ import {
 import OrderFormModal from '../components/OrderFormModal';
 import PatientFormModal from '../components/PatientFormModal';
 import AlertSettingsModal from '../components/AlertSettingsModal';
-import { PROGRESS_BADGE } from '../labels';
+import { PROGRESS_BADGE, TRACK_LABEL, TRACK_BADGE, REFINEMENT_LABEL, REFINEMENT_BADGE } from '../labels';
 import { labBadgeStyle, useLabs } from '../lib/labs';
 import { doctorBadgeStyle, useDoctors } from '../lib/doctors';
 import {
@@ -25,6 +25,12 @@ type ViewMode = 'group' | 'date';
 
 export default function OrderTracking() {
   const orders = useLiveQuery(() => db.orders.toArray()) ?? [];
+  const patients = useLiveQuery(() => db.patients.toArray()) ?? [];
+  const patientsById = useMemo(() => {
+    const m = new Map<string, Patient>();
+    for (const p of patients) m.set(p.id, p);
+    return m;
+  }, [patients]);
   const labs = useLabs();
   const [modalTarget, setModalTarget] = useState<Order | 'new' | null>(null);
   const [patientModalTarget, setPatientModalTarget] = useState<Patient | 'new' | null>(null);
@@ -339,6 +345,7 @@ export default function OrderTracking() {
         <GroupView
           groups={grouped}
           alertsByOrder={alertsByOrder}
+          patientsById={patientsById}
           onClick={(o) => setModalTarget(o)}
           onAddForPatient={(patientId) => {
             setOrderPrefillPatientId(patientId);
@@ -399,11 +406,13 @@ function ViewToggle({ view, onChange }: { view: ViewMode; onChange: (v: ViewMode
 function GroupView({
   groups,
   alertsByOrder,
+  patientsById,
   onClick,
   onAddForPatient,
 }: {
   groups: { key: string; list: Order[] }[];
   alertsByOrder: Map<string, OrderAlert[]>;
+  patientsById: Map<string, Patient>;
   onClick: (o: Order) => void;
   onAddForPatient: (patientId: string) => void;
 }) {
@@ -417,13 +426,24 @@ function GroupView({
     <div className="space-y-3">
       {groups.map(({ key, list }) => {
         const head = list[0];
+        const patient = patientsById.get(head.patientId);
         return (
           <div key={key} className="rounded-xl border border-zinc-800 bg-zinc-900/30 overflow-hidden">
             <div className="px-4 py-2 bg-zinc-900/60 border-b border-zinc-800 flex items-center justify-between">
-              <div className="flex items-center gap-3 text-sm">
+              <div className="flex items-center gap-2 text-sm flex-wrap">
                 <span className="text-zinc-500 tabular">{head.patientChartNo}</span>
                 <span className="text-zinc-100 font-medium">{head.patientName}</span>
                 {head.doctor && <DoctorBadge name={head.doctor} />}
+                {patient?.track && (
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] border whitespace-nowrap ${TRACK_BADGE[patient.track]}`}>
+                    {TRACK_LABEL[patient.track]}
+                  </span>
+                )}
+                {patient && patient.refinementLevel >= 1 && patient.refinementLevel <= 3 && (
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] border whitespace-nowrap ${REFINEMENT_BADGE[patient.refinementLevel as 1 | 2 | 3]}`}>
+                    {REFINEMENT_LABEL[patient.refinementLevel as 1 | 2 | 3]}
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <button

@@ -157,8 +157,12 @@ $shortcut.TargetPath = $nodeExe
 $shortcut.Arguments = '"' + $dstApp + '\scripts\start-clinic.mjs"'
 $shortcut.WorkingDirectory = $dstApp
 $shortcut.Description = '隱形矯正追蹤 — 啟動 server + Chrome'
-$iconPath = Join-Path $dstApp 'public\favicon.png'
-if (Test-Path $iconPath) {
+$iconPath = $null
+foreach ($cand in @('public\icon.ico', 'public\favicon.png')) {
+    $p = Join-Path $dstApp $cand
+    if (Test-Path $p) { $iconPath = $p; break }
+}
+if ($iconPath) {
     $shortcut.IconLocation = "$iconPath,0"
 }
 $shortcut.Save()

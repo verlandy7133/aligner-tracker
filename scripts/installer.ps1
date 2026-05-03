@@ -108,10 +108,16 @@ Set-Location $dstApp
 $npmLog = Join-Path $env:TEMP "npm-install-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
 Write-Host "  → log: $npmLog" -ForegroundColor Gray
 # --legacy-peer-deps：vite v8 vs vite-plugin-pwa v1.2 peer 衝突暫繞，等 plugin 升級後可移除
-& $npmCmd install --legacy-peer-deps 2>&1 | Tee-Object -FilePath $npmLog
-if ($LASTEXITCODE -ne 0) {
+# 暫時關掉 ErrorActionPreference=Stop：PS 5.1 在 2>&1 redirect 時會把 npm 的 stderr warning
+# 包成 NativeCommandError 直接中斷腳本（即使 npm exit 0）。換成 Continue 讓 stderr 只是輸出
+$prevEAP = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+& $npmCmd install --legacy-peer-deps 2>&1 | Tee-Object -FilePath $npmLog | Out-Host
+$npmInstallExit = $LASTEXITCODE
+$ErrorActionPreference = $prevEAP
+if ($npmInstallExit -ne 0) {
     Write-Host ""
-    Write-Host "  ❌ npm install 失敗 (exit code $LASTEXITCODE)" -ForegroundColor Red
+    Write-Host "  ❌ npm install 失敗 (exit code $npmInstallExit)" -ForegroundColor Red
     Write-Host "  完整 log: $npmLog" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "  常見原因 + 對應動作：" -ForegroundColor Cyan
@@ -128,9 +134,13 @@ if (Test-Path (Join-Path $dstApp 'dist')) {
     Write-Host '  ✓ dist/ 已存在 (跳過 build)' -ForegroundColor Green
 } else {
     Write-Host '  → 編譯中...'
-    & $npmCmd run build 2>&1 | Tee-Object -FilePath (Join-Path $env:TEMP "npm-build-$(Get-Date -Format 'yyyyMMdd-HHmmss').log")
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  ❌ build 失敗 (exit code $LASTEXITCODE)" -ForegroundColor Red
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & $npmCmd run build 2>&1 | Tee-Object -FilePath (Join-Path $env:TEMP "npm-build-$(Get-Date -Format 'yyyyMMdd-HHmmss').log") | Out-Host
+    $npmBuildExit = $LASTEXITCODE
+    $ErrorActionPreference = $prevEAP
+    if ($npmBuildExit -ne 0) {
+        Write-Host "  ❌ build 失敗 (exit code $npmBuildExit)" -ForegroundColor Red
         Read-Host '按 Enter 結束'; exit 1
     }
     Write-Host '  ✓ 編譯完成' -ForegroundColor Green

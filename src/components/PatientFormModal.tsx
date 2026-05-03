@@ -269,6 +269,14 @@ export default function PatientFormModal({ target, prefillName, onClose }: Patie
       scanInfo: form.scanInfo.trim() || null,
       productLine: form.productLine,
       status: form.status,
+      // track / refinementLevel 是 derived 欄位（從 orders 推），form 不編輯
+      // edit 模式保留既有值；new 模式預設 null / 0，下次跑 reapply-excel 會補
+      track:
+        mode === 'edit' && target !== 'new' && target !== null ? target.track ?? null : null,
+      refinementLevel:
+        mode === 'edit' && target !== 'new' && target !== null
+          ? target.refinementLevel ?? 0
+          : 0,
       hasConsent: form.hasConsent,
       orderDate: form.orderDate || null,
       startDate: form.startDate || null,

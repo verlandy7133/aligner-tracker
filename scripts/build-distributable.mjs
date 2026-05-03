@@ -16,6 +16,10 @@ const ROOT = path.resolve(__dirname, '..');
 const BUNDLE = 'D:\\隱形矯正追蹤系統';
 const DATA_SRC = 'D:\\矯正';
 
+// 只搬「新位置」：扁平化後的 病患資料夾/ + 病患授權書/
+// 不搬舊位置「口掃檔 取資料 下單/」（保留在 D 機當歷史備份；筆電不需要、省 60GB）
+const DATA_INCLUDE_SUBDIRS = ['病患資料夾', '病患授權書'];
+
 const APP_EXCLUDE = new Set(['node_modules', 'dist', '.git', '.vscode', '.claude', '.DS_Store']);
 
 async function rmrf(p) {
@@ -94,14 +98,27 @@ async function main() {
     console.log(`→ 跳過 app code 複製`);
   }
 
-  // 4. Copy 矯正資料夾 (病患 PDF / JPG / 口掃)
+  // 4. Copy 矯正資料夾 — 只搬 DATA_INCLUDE_SUBDIRS（病患資料夾 + 病患授權書）
+  //    舊位置「口掃檔 取資料 下單」保留在 D 機，不打包
   if (skipData) {
     console.log(`→ 跳過病患資料夾複製 (${path.join(BUNDLE, '矯正資料')} 維持原狀)`);
   } else if (fs.existsSync(DATA_SRC)) {
-    console.log(`→ 複製病患資料夾 ${DATA_SRC}`);
     const dataDst = path.join(BUNDLE, '矯正資料');
-    await copyDir(DATA_SRC, dataDst);
-    console.log(`  完成 (${fmtSize(await dirSize(dataDst))})`);
+    // 先 rmrf 整個 矯正資料/，清掉之前 bundle 留下的舊結構（如「口掃檔 取資料 下單」）
+    console.log(`→ 清空舊 ${dataDst}（避免殘留舊結構）`);
+    await rmrf(dataDst);
+    await fsp.mkdir(dataDst, { recursive: true });
+    for (const sub of DATA_INCLUDE_SUBDIRS) {
+      const subSrc = path.join(DATA_SRC, sub);
+      if (!fs.existsSync(subSrc)) {
+        console.log(`  ⚠️ 跳過 ${sub}（來源不存在）`);
+        continue;
+      }
+      console.log(`→ 複製 ${sub}（這個會跑很久）`);
+      const subDst = path.join(dataDst, sub);
+      await copyDir(subSrc, subDst);
+      console.log(`  完成 ${sub} (${fmtSize(await dirSize(subDst))})`);
+    }
   } else {
     console.log(`⚠️ 找不到 ${DATA_SRC}，跳過`);
   }
@@ -176,7 +193,13 @@ function parseAlignerRangeMax(range) {
 
 async function buildBackupFromDevData() {
   const devData = path.join(ROOT, 'dev-data');
-  const APP_VERSION = '0.1.0';
+  let APP_VERSION = '0.0.0';
+  try {
+    const pkg = JSON.parse(await fsp.readFile(path.join(ROOT, 'package.json'), 'utf8'));
+    APP_VERSION = pkg.version ?? APP_VERSION;
+  } catch {
+    /* ignore */
+  }
 
   let patients = [];
   let orders = [];

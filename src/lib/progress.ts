@@ -41,12 +41,6 @@ export type PatientProgress = {
   totalMonths: number | null; // effectiveStart 到較長一顎的 endDate
 };
 
-const MS_PER_DAY = 1000 * 60 * 60 * 24;
-
-function diffDays(from: string, to: string): number {
-  return Math.floor((new Date(to).getTime() - new Date(from).getTime()) / MS_PER_DAY);
-}
-
 function addDays(from: string, days: number): string {
   const d = new Date(from);
   d.setDate(d.getDate() + days);

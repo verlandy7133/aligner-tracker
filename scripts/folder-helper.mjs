@@ -111,6 +111,45 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // 建立資料夾（含 path remap + allowlist 守門）
+  if (url.pathname === '/create-folder') {
+    if (readRole() !== 'master') {
+      res.statusCode = 403;
+      res.end('follower 不能建立資料夾，請在 master (筆電) 操作');
+      return;
+    }
+    const target = url.searchParams.get('path');
+    if (!target) {
+      res.statusCode = 400;
+      res.end('missing path');
+      return;
+    }
+    let remapped = target;
+    if (DRIVE !== 'D:' && /^D:\\/.test(target)) remapped = DRIVE + target.slice(2);
+    if (!ALLOWED_ROOTS.some((root) => remapped.startsWith(root))) {
+      res.statusCode = 403;
+      res.end(`path not in allowlist (must start with one of: ${ALLOWED_ROOTS.join(', ')})`);
+      return;
+    }
+    if (fs.existsSync(remapped)) {
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ created: false, alreadyExisted: true, path: remapped }));
+      return;
+    }
+    try {
+      fs.mkdirSync(remapped, { recursive: true });
+      console.log(`[folder-helper] created folder: ${remapped}`);
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ created: true, path: remapped }));
+    } catch (e) {
+      res.statusCode = 500;
+      res.end(`mkdir failed: ${e.message}`);
+    }
+    return;
+  }
+
   // 在指定資料夾找符合 pattern 的 PDF 並用系統預設程式開（用途：指示單、轉介單等）
   if (url.pathname === '/find-and-open') {
     const folder = url.searchParams.get('folder');

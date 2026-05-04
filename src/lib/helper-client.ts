@@ -34,6 +34,28 @@ export async function findAndOpenPdf(folder: string, pattern: string): Promise<H
   }
 }
 
+// 建立資料夾（master 才能；follower 會回 403）
+export type CreateFolderResult =
+  | { state: 'created'; path: string }
+  | { state: 'already-existed'; path: string }
+  | { state: 'error'; message: string }
+  | { state: 'helper-down' };
+
+export async function createFolder(path: string): Promise<CreateFolderResult> {
+  try {
+    const resp = await fetch(`${HELPER_BASE}/create-folder?path=${encodeURIComponent(path)}`);
+    if (resp.ok) {
+      const data = (await resp.json()) as { created?: boolean; alreadyExisted?: boolean; path: string };
+      if (data.alreadyExisted) return { state: 'already-existed', path: data.path };
+      return { state: 'created', path: data.path };
+    }
+    const message = await resp.text();
+    return { state: 'error', message };
+  } catch {
+    return { state: 'helper-down' };
+  }
+}
+
 // 顯示給 user 看的訊息（toast 或 alert 用）
 export function describeHelperFailure(result: HelperResult): string | null {
   if (result.state === 'opened') return null;

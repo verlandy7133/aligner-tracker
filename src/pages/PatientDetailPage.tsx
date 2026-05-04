@@ -19,7 +19,26 @@ import {
 } from '../labels';
 import { deriveProgress } from '../lib/progress';
 import PatientFormModal from '../components/PatientFormModal';
-import { callHelper, findAndOpenPdf, describeHelperFailure } from '../lib/helper-client';
+import { callHelper, findAndOpenPdf, createFolder, describeHelperFailure } from '../lib/helper-client';
+
+// 把西元 birthday (YYYY-MM-DD) 轉成民國格式 (民國YYMMDD 或 民國YYYMMDD)
+// 例：1993-11-02 → 821102；2015-12-07 → 1041207
+function birthdayToROCFolder(birthday: string | null): string | null {
+  if (!birthday) return null;
+  const m = birthday.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const rocYear = parseInt(m[1], 10) - 1911;
+  if (rocYear < 1) return null;
+  return `${rocYear}${m[2]}${m[3]}`;
+}
+
+// 推算病患資料夾的 conventional path（無前綴的 active 命名）
+// 路徑樣本：D:\矯正\病患資料夾\821102嚴家彬
+function deriveConventionalSourceFolder(birthday: string | null, name: string): string | null {
+  const roc = birthdayToROCFolder(birthday);
+  if (!roc || !name) return null;
+  return `D:\\矯正\\病患資料夾\\${roc}${name}`;
+}
 
 export default function PatientDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -94,19 +113,59 @@ export default function PatientDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {patient.sourceFolder && (
-            <button
-              onClick={async () => {
-                const r = await callHelper('open-folder', patient.sourceFolder);
-                const msg = describeHelperFailure(r);
-                if (msg) alert(msg);
-              }}
-              className="px-3 py-2 rounded-md text-sm border border-amber-500/40 text-amber-300 hover:bg-amber-500/10 transition"
-              title={patient.sourceFolder}
-            >
-              📁 開資料夾
-            </button>
-          )}
+          {(() => {
+            // 優先用 patient.sourceFolder，沒有就 derive conventional path（需要生日）
+            const derived = deriveConventionalSourceFolder(patient.birthday, patient.name);
+            const effectiveFolder = patient.sourceFolder || derived;
+            return (
+              <button
+                onClick={async () => {
+                  // 沒生日 + 沒 sourceFolder → 無法 derive path
+                  if (!effectiveFolder) {
+                    alert('要先填生日才能建立資料夾。請點「✎ 編輯」補上生日後再試。');
+                    return;
+                  }
+                  // 1. 先 try open
+                  const r1 = await callHelper('open-folder', effectiveFolder);
+                  if (r1.state === 'opened') return;
+                  // 2. helper down → alert
+                  if (r1.state === 'helper-down') {
+                    alert(describeHelperFailure(r1));
+                    return;
+                  }
+                  // 3. 不存在 → 詢問是否建立
+                  const isNotFound = r1.message?.includes('not found');
+                  if (!isNotFound) {
+                    alert(describeHelperFailure(r1));
+                    return;
+                  }
+                  if (!confirm(`資料夾不存在，要建立嗎？\n\n${effectiveFolder}`)) return;
+                  // 4. 建立
+                  const c = await createFolder(effectiveFolder);
+                  if (c.state === 'helper-down' || c.state === 'error') {
+                    alert(c.state === 'helper-down' ? '本機 helper 沒回應' : `建立失敗：${c.message}`);
+                    return;
+                  }
+                  // 5. 持久化 sourceFolder 到 IndexedDB（下次點不用再問）
+                  if (!patient.sourceFolder) {
+                    await db.patients.update(patient.id, { sourceFolder: effectiveFolder });
+                  }
+                  // 6. 開新建好的資料夾
+                  await callHelper('open-folder', effectiveFolder);
+                }}
+                className="px-3 py-2 rounded-md text-sm border border-amber-500/40 text-amber-300 hover:bg-amber-500/10 transition"
+                title={
+                  patient.sourceFolder
+                    ? effectiveFolder ?? ''
+                    : effectiveFolder
+                      ? `${effectiveFolder}（未建立、點下去建立）`
+                      : '需要先填生日'
+                }
+              >
+                📁 {patient.sourceFolder ? '開資料夾' : '建立 / 開資料夾'}
+              </button>
+            );
+          })()}
           {patient.hasConsent && patient.consentPdfPath && (
             <button
               onClick={async () => {

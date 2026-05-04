@@ -98,9 +98,9 @@ const server = http.createServer((req, res) => {
       });
 
     (async () => {
-      const code1 = await runPython('import-excel-orders.py', []);
-      const code2 = await runPython('import-supplementary-orders.py', ['--apply']);
-      const success = code1 === 0 && code2 === 0;
+      // 用新版 takeover script（讀單檔兩 sheet）取代舊兩支
+      const code = await runPython('import-clinic-takeover.py', []);
+      const success = code === 0;
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ success, excelFolder, log }));
     })();

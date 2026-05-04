@@ -1,5 +1,42 @@
 # Changelog
 
+## v0.1.5 — 2026-05-04
+
+筆電 master 部署 + UI 自助化。整個 session 圍繞「讓 master 端可自更新、自調 UI」這條線。
+
+### 新增
+
+- **App 內更新機制**：「設定 → App 更新」section（master only）
+  - 「🔍 檢查更新」呼叫 helper `/check-update` → git fetch + 比 HEAD vs origin/main
+  - 「⬆ 立即更新 (N 個 commit)」呼叫 helper `/run-update` → spawn update.ps1 -Silent
+  - 完成提示重整 PWA、details 可展開看 stdout
+  - follower 自動隱藏按鈕 + 顯示提示
+- **字級可調 UI scale**（85% ~ 150%、5% 步進、5 個 preset）
+  - 改 root `font-size`、Tailwind 所有 rem utility 自動 scale
+  - 即時生效、自動存 IndexedDB（key='ui-scale'）、App 啟動時 initScale() 套用
+- **詳細頁自動建資料夾**：📁 按鈕沒對應實體資料夾就 prompt 建立
+  - 從生日 + 姓名推 conventional path（民國YYMMDD姓名）
+  - helper 新 endpoint `/create-folder`（master only、allowlist 守門、recursive mkdir）
+  - 建完自動 persist 到 IndexedDB sourceFolder、下次點不再問
+  - 沒生日時 alert 提示先填生日
+- **桌面捷徑工具**：`scripts/make-shortcuts.ps1` 一鍵建啟動 + 更新 兩個捷徑
+  - 用 `public/icon.ico` (multi-size 16~256) 替換之前的 PNG → 桌面 icon 不再糊
+  - 「更新」捷徑用 shell32.dll,238 雲端 icon、跟啟動 icon 視覺區分
+- **`update.ps1 -Silent` flag**：給 helper service 自動化用、跳過所有 Read-Host
+
+### 修正
+
+- **production build 可 seed**：之前 `seed.ts` 有 `if (!DEV) return`，vite preview 下完全不 seed → 部署到筆電後清空 DB 不會自動填回。改成 dev/prod 都跑（dev-data JSON 在 build 時 vite 自動 bundle 進 dist）
+- **installer.ps1 不被 stderr warning 中斷**：PS 5.1 + `2>&1` + `ErrorActionPreference='Stop'` 三件事互動，npm warn deprecated 直接讓 installer 中斷；改成暫時切 Continue + 用 `$LASTEXITCODE` 判定
+- **build-distributable.mjs 只搬新位置**：之前打包 `D:\矯正` 全部搬（含舊三層位置 60GB），現只搬 `病患資料夾/` + `病患授權書/`，bundle 從 ~120GB 縮到 61GB
+- **build-distributable.mjs APP_VERSION** 從 package.json 動態讀
+- **`PatientFormModal.tsx` 編譯錯誤**：payload 缺 track / refinementLevel（v0.1.3 拆兩軸時沒同步）
+- **`progress.ts` 移除未使用的 diffDays / MS_PER_DAY**（前次重寫 startDate 邏輯時遺留）
+- **`DebugPanel.tsx` 移除 'not-dev' reason** 殘留（v0.1.4 在 SeedResult 拆掉但漏改 panel）
+- **依日期 view 排版**：原本 table 沒 wrapper、`overflow-hidden` 截掉欄；改 table-fixed + colgroup 鎖死欄寬，備註欄吸光剩餘空間
+- **病患列表 filter row 縮成 2 行 + 警示** + filter label 字級放大
+- **病患列表年齡 / 進度 / 下次回診 / 品牌 改置中對齊**
+
 ## v0.1.4 — 2026-05-02
 
 病患列表 UI 微調。

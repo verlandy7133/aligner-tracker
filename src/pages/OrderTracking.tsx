@@ -180,13 +180,6 @@ export default function OrderTracking() {
           />
           <ViewToggle view={view} onChange={setView} />
           <button
-            onClick={() => setSortDir(sortDir === 'asc' ? 'desc' : 'asc')}
-            className="px-3 py-2 rounded-md text-sm border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition"
-            title={view === 'group' ? '按病歷號排序' : '按日期排序'}
-          >
-            {sortDir === 'asc' ? '↑ 升冪' : '↓ 降冪'}
-          </button>
-          <button
             onClick={() => setAlertSettingsOpen(true)}
             className="px-3 py-2 rounded-md text-sm border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition"
             title="警示閾值設定"
@@ -350,6 +343,16 @@ export default function OrderTracking() {
             清除進度篩選 ({progressFilter})
           </button>
         )}
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-xs text-zinc-500">排序：</span>
+          <button
+            onClick={() => setSortDir(sortDir === 'asc' ? 'desc' : 'asc')}
+            className="px-3 py-1.5 rounded-full text-xs border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition"
+            title={view === 'group' ? '按病歷號排序' : '按日期排序'}
+          >
+            {sortDir === 'asc' ? '↑ 升冪' : '↓ 降冪'}
+          </button>
+        </div>
       </section>
 
       {/* 列表 */}

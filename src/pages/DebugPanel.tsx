@@ -61,7 +61,6 @@ export default function DebugPanel() {
                 {seedResult.reason === 'already-has-data' &&
                   `DB 已有資料 (${seedResult.count} 筆)，跳過匯入`}
                 {seedResult.reason === 'no-seed-file' && '⚠️ 找不到 import JSON'}
-                {seedResult.reason === 'not-dev' && 'prod 模式，不自動匯入'}
                 {seedResult.reason === 'error' && `❌ ${seedResult.error}`}
               </span>
             )}

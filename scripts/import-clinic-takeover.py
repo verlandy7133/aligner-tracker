@@ -36,7 +36,7 @@ LAB_MAP = {
     'retainer': '美鉑',
 }
 
-PROGRESS_VALID = {'尚未開始', '已下單牙套', '診所已收到牙套', '已完成'}
+PROGRESS_VALID = {'尚未開始', '設計中', '已下單牙套', '診所已收到牙套', '已完成'}
 
 SHEET_MASTER = '生產資料庫'  # 1 row / patient
 SHEET_ORDERS = '牙套下單'  # 多 row / patient
@@ -116,6 +116,19 @@ def extract_actual_order_date(text, fallback_year):
     if not text:
         return None
     m = re.search(r'(\d{1,2})/(\d{1,2})\s*下單', str(text))
+    if not m:
+        return None
+    mo, d = int(m.group(1)), int(m.group(2))
+    if not (1 <= mo <= 12 and 1 <= d <= 31):
+        return None
+    return f'{fallback_year}-{mo:02d}-{d:02d}'
+
+
+def extract_design_submit_date(text, fallback_year):
+    """從 'M/D送出設計檔' 抓日期。例：'4/7送出設計檔設計' → 2026-04-07"""
+    if not text:
+        return None
+    m = re.search(r'(\d{1,2})/(\d{1,2})\s*送出設計檔', str(text))
     if not m:
         return None
     mo, d = int(m.group(1)), int(m.group(2))
@@ -287,11 +300,19 @@ def main():
             case_year = int(head['date'].split('-')[0])
         for row in grp:
             rng, rest = parse_aligner_range(row['alignerRangeRaw'])
-            if not rng:
-                # 沒有 UL/L 副數區間 → 這 row 不是真正的 order（諮詢備註 / 退費中 等）
+            raw_text = str(row['alignerRangeRaw'] or '')
+            has_design_submit = '送出設計檔' in raw_text
+            if not rng and not has_design_submit:
+                # 沒 UL/L 副數區間、也沒「送出設計檔」 → 跳過（純諮詢 / 退費）
                 continue
-            combined = f"{rest or ''} {row['notes'] or ''}"
-            actual = extract_actual_order_date(combined, case_year)
+            combined = f"{raw_text} {row['notes'] or ''}"
+            # 「送出設計檔」row → 進度改 設計中、日期從 'M/D送出設計檔' 抽
+            if has_design_submit and not rng:
+                actual = extract_design_submit_date(raw_text, case_year)
+                progress_value = '設計中'
+            else:
+                actual = extract_actual_order_date(combined, case_year)
+                progress_value = normalize_progress(row['progress'])
             order_date = actual or row['date'] or head['date'] or ''
             orders.append({
                 'id': f"excel-{row['r']:04d}-{patient['id']}",
@@ -306,7 +327,7 @@ def main():
                 if row['batchType'] and str(row['batchType']).strip() not in ('X', 'x')
                 else '',
                 'alignerRange': rng,
-                'progress': normalize_progress(row['progress']),
+                'progress': progress_value,
                 'expectedDate': parse_date(row['expectedDate']),
                 'actualDate': parse_date(row['actualDate']),
                 'nextStep': str(row['nextStep']).strip() if row['nextStep'] else '',

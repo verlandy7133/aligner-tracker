@@ -82,9 +82,10 @@ export default function OrderReportPage() {
           摘要
         </h2>
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-4 print:border-zinc-300 print:bg-transparent">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
             <Stat label="本月總筆數" value={monthOrders.length} accent />
             <Stat label="尚未開始" value={progressSummary['尚未開始'] || 0} />
+            <Stat label="設計中" value={progressSummary['設計中'] || 0} />
             <Stat label="已下單牙套" value={progressSummary['已下單牙套'] || 0} />
             <Stat label="診所收到" value={progressSummary['診所已收到牙套'] || 0} />
             <Stat label="已完成" value={progressSummary['已完成'] || 0} />

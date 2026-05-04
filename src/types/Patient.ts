@@ -64,12 +64,14 @@ export const DEFAULT_CYCLE_DAYS = 14;
 // 對齊 Excel「下單記錄」結構：每筆下單一列，登記副數區間 + 進度 + 醫師等。
 export type ProgressStatus =
   | '尚未開始'
+  | '設計中'
   | '已下單牙套'
   | '診所已收到牙套'
   | '已完成';
 
 export const PROGRESS_OPTIONS: ProgressStatus[] = [
   '尚未開始',
+  '設計中',
   '已下單牙套',
   '診所已收到牙套',
   '已完成',

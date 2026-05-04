@@ -89,6 +89,7 @@ export default function OrderTracking() {
     const map = new Map<string, Record<ProgressStatus, number>>();
     const totals: Record<ProgressStatus, number> = {
       尚未開始: 0,
+      設計中: 0,
       已下單牙套: 0,
       診所已收到牙套: 0,
       已完成: 0,
@@ -97,7 +98,7 @@ export default function OrderTracking() {
       if (!o.date) continue;
       const m = o.date.slice(0, 7);
       if (!map.has(m)) {
-        map.set(m, { 尚未開始: 0, 已下單牙套: 0, 診所已收到牙套: 0, 已完成: 0 });
+        map.set(m, { 尚未開始: 0, 設計中: 0, 已下單牙套: 0, 診所已收到牙套: 0, 已完成: 0 });
       }
       map.get(m)![o.progress]++;
       totals[o.progress]++;

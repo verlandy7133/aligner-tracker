@@ -3,6 +3,7 @@ import type { PatientFlag, PatientStatus, PatientTrack, ProgressStatus } from '.
 // ─── 下單進度 ───────────────────────────────────────────────
 export const PROGRESS_BADGE: Record<ProgressStatus, string> = {
   尚未開始: 'bg-zinc-700/30 text-zinc-300 border-zinc-700',
+  設計中: 'bg-violet-500/15 text-violet-300 border-violet-500/30',
   已下單牙套: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
   診所已收到牙套: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
   已完成: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',

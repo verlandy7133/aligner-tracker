@@ -497,7 +497,18 @@ function DateView({
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm table-fixed">
+          <colgroup>
+            <col className="w-[110px]" /> {/* 日期 */}
+            <col className="w-[80px]" /> {/* 病歷號 */}
+            <col className="w-[90px]" /> {/* 姓名 */}
+            <col className="w-[100px]" /> {/* 醫師 */}
+            <col className="w-[80px]" /> {/* 技工所 */}
+            <col className="w-[180px]" /> {/* 副數區間 */}
+            <col className="w-[140px]" /> {/* 進度 */}
+            <col className="w-[160px]" /> {/* 警示 */}
+            <col /> {/* 備註 — 剩餘空間 */}
+          </colgroup>
           <thead className="bg-zinc-900/60 text-zinc-500 text-xs uppercase tracking-wider">
             <tr>
               <Th>日期</Th>
@@ -659,8 +670,8 @@ function LabBadge({ lab }: { lab: string }) {
   );
 }
 
-function Th({ children }: { children: React.ReactNode }) {
-  return <th className="text-left font-medium px-3 py-2.5 whitespace-nowrap">{children}</th>;
+function Th({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return <th className={`text-left font-medium px-3 py-2.5 whitespace-nowrap ${className}`}>{children}</th>;
 }
 
 function SelectChip({

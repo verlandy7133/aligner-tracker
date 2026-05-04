@@ -496,20 +496,21 @@ function DateView({
     );
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-zinc-900/60 text-zinc-500 text-xs uppercase tracking-wider">
-          <tr>
-            <Th>日期</Th>
-            <Th>病歷號</Th>
-            <Th>姓名</Th>
-            <Th>醫師</Th>
-            <Th>技工所</Th>
-            <Th>副數區間</Th>
-            <Th>進度</Th>
-            <Th>警示</Th>
-            <Th>備註</Th>
-          </tr>
-        </thead>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-zinc-900/60 text-zinc-500 text-xs uppercase tracking-wider">
+            <tr>
+              <Th>日期</Th>
+              <Th>病歷號</Th>
+              <Th>姓名</Th>
+              <Th>醫師</Th>
+              <Th>技工所</Th>
+              <Th>副數區間</Th>
+              <Th>進度</Th>
+              <Th>警示</Th>
+              <Th>備註</Th>
+            </tr>
+          </thead>
         <tbody className="divide-y divide-zinc-800/60">
           {orders.map((o) => {
             const alerts = alertsByOrder.get(o.id) ?? [];
@@ -551,8 +552,9 @@ function DateView({
               </tr>
             );
           })}
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

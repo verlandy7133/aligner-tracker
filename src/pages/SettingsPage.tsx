@@ -31,7 +31,8 @@ import {
   saveThresholds,
 } from '../config/alerts';
 import { seedIfEmpty, type SeedResult } from '../seed';
-import { checkUpdate, runUpdate, scanExcel } from '../lib/helper-client';
+import { checkUpdate, runUpdate, scanExcel, listFolderNames } from '../lib/helper-client';
+import { parseFolderName } from '../lib/parse-folder-name';
 import { useScale, saveScale, MIN_SCALE, MAX_SCALE, DEFAULT_SCALE } from '../lib/ui-scale';
 
 export default function SettingsPage() {
@@ -53,6 +54,7 @@ export default function SettingsPage() {
       <RescanSection />
       <ScanExcelSection />
       <ReapplyExcelSection />
+      <BirthdayBackfillSection />
       <DbSection />
     </div>
   );
@@ -1056,6 +1058,188 @@ function ReapplyExcelSection() {
         {state === 'error' && (
           <div className="px-3 py-2 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300">
             ⚠️ {error}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* ─── 補生日（從資料夾名 match 同名 patient）─────────────── */
+function BirthdayBackfillSection() {
+  const [state, setState] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+  const [error, setError] = useState('');
+  const [result, setResult] = useState<{
+    candidatesCount: number;
+    matched: { name: string; birthday: string; folder: string }[];
+    ambiguous: { name: string; folders: string[] }[];
+    notFound: string[];
+  } | null>(null);
+
+  const noBirthdayPatients =
+    useLiveQuery(async () => {
+      const all = await db.patients.toArray();
+      return all.filter((p) => !p.birthday);
+    }) ?? [];
+
+  async function go() {
+    setState('running');
+    setError('');
+    setResult(null);
+
+    // 1. 讀目前 birthday=null 的病患
+    const targets = await db.patients.toArray();
+    const noBirthday = targets.filter((p) => !p.birthday);
+    if (noBirthday.length === 0) {
+      setError('沒有缺生日的病患');
+      setState('error');
+      return;
+    }
+
+    // 2. helper 列病患資料夾所有 folder 名
+    // 用 D:\ 路徑，helper 會自動 path remap 到 C:\（如果在筆電）
+    const r = await listFolderNames('D:\\矯正\\病患資料夾');
+    if ('error' in r) {
+      setError(`列資料夾失敗：${r.error}`);
+      setState('error');
+      return;
+    }
+
+    // 3. 對 folder 名解析、建 name → [folders] map
+    const nameToFolders = new Map<string, { name: string; birthday: string; raw: string }[]>();
+    for (const folderName of r.names) {
+      const parsed = parseFolderName(folderName);
+      if (!parsed.name || !parsed.birthday) continue;
+      if (!nameToFolders.has(parsed.name)) nameToFolders.set(parsed.name, []);
+      nameToFolders.get(parsed.name)!.push({
+        name: parsed.name,
+        birthday: parsed.birthday,
+        raw: folderName,
+      });
+    }
+
+    // 4. match
+    const matched: { name: string; birthday: string; folder: string }[] = [];
+    const ambiguous: { name: string; folders: string[] }[] = [];
+    const notFound: string[] = [];
+    const updates: { id: string; birthday: string; sourceFolder: string }[] = [];
+
+    for (const p of noBirthday) {
+      const candidates = nameToFolders.get(p.name);
+      if (!candidates || candidates.length === 0) {
+        notFound.push(p.name);
+        continue;
+      }
+      if (candidates.length > 1) {
+        ambiguous.push({ name: p.name, folders: candidates.map((c) => c.raw) });
+        continue;
+      }
+      const c = candidates[0];
+      matched.push({ name: p.name, birthday: c.birthday, folder: c.raw });
+      updates.push({
+        id: p.id,
+        birthday: c.birthday,
+        sourceFolder: `${r.folder}\\${c.raw}`,
+      });
+    }
+
+    // 5. 寫入 IndexedDB
+    const nowIso = new Date().toISOString();
+    for (const u of updates) {
+      await db.patients.update(u.id, {
+        birthday: u.birthday,
+        sourceFolder: u.sourceFolder,
+        updatedAt: nowIso,
+      });
+    }
+
+    setResult({
+      candidatesCount: noBirthday.length,
+      matched,
+      ambiguous,
+      notFound,
+    });
+    setState('done');
+  }
+
+  return (
+    <section className="rounded-xl border border-zinc-800 bg-zinc-900/30">
+      <header className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-medium text-zinc-200">補生日（從資料夾名）</h2>
+          <span className="text-xs text-zinc-500">
+            缺生日 {noBirthdayPatients.length} 人
+          </span>
+        </div>
+        <button
+          onClick={go}
+          disabled={state === 'running' || noBirthdayPatients.length === 0}
+          className="px-3 py-1.5 rounded-md text-xs border border-zinc-700 text-zinc-200 hover:bg-zinc-800 transition disabled:opacity-50"
+        >
+          {state === 'running' ? '⏳ 處理中…' : '🎯 立即補上'}
+        </button>
+      </header>
+      <div className="p-5 space-y-2 text-sm">
+        <p className="text-xs text-zinc-500">
+          掃 <code className="text-zinc-400">D:\矯正\病患資料夾\</code> 找跟病患同名的資料夾，從資料夾名前 6-7 位民國年抽生日填回去。
+          同名多個 → 標 ambiguous 不動、由你手動處理。
+        </p>
+        {error && (
+          <div className="px-3 py-2 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+            ⚠️ {error}
+          </div>
+        )}
+        {result && (
+          <div className="space-y-2 text-xs">
+            <div className="px-3 py-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
+              ✓ 補上 {result.matched.length} / {result.candidatesCount} 人
+              {result.ambiguous.length > 0 && ` · 同名多個 ${result.ambiguous.length}`}
+              {result.notFound.length > 0 && ` · 找不到 ${result.notFound.length}`}
+            </div>
+            {result.matched.length > 0 && (
+              <details>
+                <summary className="cursor-pointer text-zinc-500 hover:text-zinc-300">
+                  ▸ 補上清單 ({result.matched.length})
+                </summary>
+                <div className="mt-2 space-y-1 pl-3">
+                  {result.matched.slice(0, 50).map((m) => (
+                    <div key={m.folder} className="text-zinc-400">
+                      {m.name} → {m.birthday} · <span className="text-zinc-600">{m.folder}</span>
+                    </div>
+                  ))}
+                  {result.matched.length > 50 && (
+                    <div className="text-zinc-600">... 還有 {result.matched.length - 50} 個</div>
+                  )}
+                </div>
+              </details>
+            )}
+            {result.ambiguous.length > 0 && (
+              <details>
+                <summary className="cursor-pointer text-amber-400 hover:text-amber-300">
+                  ⚠ 同名多個 ({result.ambiguous.length}) — 需手動處理
+                </summary>
+                <div className="mt-2 space-y-1 pl-3">
+                  {result.ambiguous.map((a) => (
+                    <div key={a.name} className="text-zinc-400">
+                      <strong className="text-zinc-200">{a.name}</strong>:
+                      <ul className="ml-2">
+                        {a.folders.map((f) => (
+                          <li key={f}>· {f}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+            {result.notFound.length > 0 && (
+              <details>
+                <summary className="cursor-pointer text-zinc-500 hover:text-zinc-300">
+                  ▸ 找不到 ({result.notFound.length})
+                </summary>
+                <div className="mt-2 text-zinc-500 pl-3">{result.notFound.join('、')}</div>
+              </details>
+            )}
           </div>
         )}
       </div>

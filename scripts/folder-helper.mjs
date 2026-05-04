@@ -225,6 +225,38 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // 列出指定資料夾底下所有 subfolder 名（給 App 端做 name match 用）
+  if (url.pathname === '/list-folder-names') {
+    const target = url.searchParams.get('folder');
+    if (!target) {
+      res.statusCode = 400;
+      res.end('missing folder');
+      return;
+    }
+    let remapped = target;
+    if (DRIVE !== 'D:' && /^D:\\/.test(target)) remapped = DRIVE + target.slice(2);
+    if (!ALLOWED_ROOTS.some((root) => remapped.startsWith(root))) {
+      res.statusCode = 403;
+      res.end('not in allowlist');
+      return;
+    }
+    if (!fs.existsSync(remapped)) {
+      res.statusCode = 404;
+      res.end(`folder not found: ${remapped}`);
+      return;
+    }
+    try {
+      const entries = fs.readdirSync(remapped, { withFileTypes: true });
+      const folders = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ folder: remapped, count: folders.length, names: folders }));
+    } catch (e) {
+      res.statusCode = 500;
+      res.end(`readdir failed: ${e.message}`);
+    }
+    return;
+  }
+
   // 建立資料夾（含 path remap + allowlist 守門）
   if (url.pathname === '/create-folder') {
     if (readRole() !== 'master') {

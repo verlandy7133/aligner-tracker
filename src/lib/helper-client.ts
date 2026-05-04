@@ -34,6 +34,20 @@ export async function findAndOpenPdf(folder: string, pattern: string): Promise<H
   }
 }
 
+// 列指定資料夾底下所有子資料夾名（為了 App 做 name match）
+export async function listFolderNames(folder: string): Promise<{ names: string[]; folder: string } | { error: string }> {
+  try {
+    const resp = await fetch(`${HELPER_BASE}/list-folder-names?folder=${encodeURIComponent(folder)}`);
+    if (resp.ok) {
+      const data = (await resp.json()) as { folder: string; count: number; names: string[] };
+      return { names: data.names, folder: data.folder };
+    }
+    return { error: await resp.text() };
+  } catch {
+    return { error: 'helper-down' };
+  }
+}
+
 // 建立資料夾（master 才能；follower 會回 403）
 export type CreateFolderResult =
   | { state: 'created'; path: string }

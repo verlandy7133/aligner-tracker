@@ -17,8 +17,27 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 import os
-# 主下單紀錄 Excel 路徑，可用環境變數 ALIGNER_MAIN_XLSX 覆蓋
-EXCEL_PATH = os.environ.get('ALIGNER_MAIN_XLSX') or r'C:\Users\YOUR_USER\Downloads\下單紀錄.xlsx'
+# 主下單紀錄 Excel 路徑：
+#   1. 環境變數 ALIGNER_MAIN_XLSX 直接指定檔案
+#   2. 否則找 ${EXCEL_FOLDER}\下單紀錄.xlsx (預設 D:\矯正\下單Excel\)
+#   3. 最後 fallback 舊位置 C:\Users\YOUR_USER\Downloads\
+def _resolve_main_xlsx():
+    if os.environ.get('ALIGNER_MAIN_XLSX'):
+        return os.environ['ALIGNER_MAIN_XLSX']
+    folder = os.environ.get('ALIGNER_EXCEL_FOLDER')
+    if not folder:
+        # 自動偵測 D 或 C 槽
+        for d in (r'D:\矯正\下單Excel', r'C:\矯正\下單Excel'):
+            if os.path.isdir(d):
+                folder = d
+                break
+    if folder:
+        candidate = os.path.join(folder, '下單紀錄.xlsx')
+        if os.path.isfile(candidate):
+            return candidate
+    return r'C:\Users\YOUR_USER\Downloads\下單紀錄.xlsx'
+
+EXCEL_PATH = _resolve_main_xlsx()
 PATIENTS_JSON = Path('dev-data/patients-import.json')
 OUT_ORDERS = Path('dev-data/excel-orders.json')
 OUT_PATIENT_UPDATES = Path('dev-data/excel-patient-updates.json')

@@ -65,6 +65,48 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // 掃 Excel 下單記錄 + 補充記錄、跑 python 兩支 import 出 JSON
+  if (url.pathname === '/scan-excel') {
+    const excelFolder = `${DRIVE}\\矯正\\下單Excel`;
+    if (!fs.existsSync(excelFolder)) {
+      res.statusCode = 404;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: `Excel 資料夾不存在：${excelFolder}（請先建立並放入 .xlsx）` }));
+      return;
+    }
+    const env = { ...process.env, ALIGNER_EXCEL_FOLDER: excelFolder, PYTHONIOENCODING: 'utf-8' };
+    const log = [];
+    const runPython = (script, args) =>
+      new Promise((resolve) => {
+        const fullArgs = [path.join(PROJECT_ROOT, 'scripts', script), ...(args ?? [])];
+        const p = spawn('python', fullArgs, {
+          cwd: PROJECT_ROOT,
+          env,
+        });
+        let out = '';
+        let err = '';
+        p.stdout.on('data', (d) => (out += d.toString()));
+        p.stderr.on('data', (d) => (err += d.toString()));
+        p.on('close', (code) => {
+          log.push({ script, exitCode: code, stdout: out.slice(-3000), stderr: err.slice(-1000) });
+          resolve(code);
+        });
+        p.on('error', (e) => {
+          log.push({ script, exitCode: -1, error: e.message });
+          resolve(-1);
+        });
+      });
+
+    (async () => {
+      const code1 = await runPython('import-excel-orders.py', []);
+      const code2 = await runPython('import-supplementary-orders.py', ['--apply']);
+      const success = code1 === 0 && code2 === 0;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success, excelFolder, log }));
+    })();
+    return;
+  }
+
   if (url.pathname === '/rescan-folders') {
     // 注：scan 不再限制 master only — 開發機跟筆電都可掃自己的資料夾
     // 跑 scan script (用當前 node)，產生最新 patients-import.json，回傳給前端

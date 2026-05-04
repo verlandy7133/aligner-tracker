@@ -31,7 +31,7 @@ import {
   saveThresholds,
 } from '../config/alerts';
 import { seedIfEmpty, type SeedResult } from '../seed';
-import { checkUpdate, runUpdate } from '../lib/helper-client';
+import { checkUpdate, runUpdate, scanExcel } from '../lib/helper-client';
 import { useScale, saveScale, MIN_SCALE, MAX_SCALE, DEFAULT_SCALE } from '../lib/ui-scale';
 
 export default function SettingsPage() {
@@ -51,6 +51,7 @@ export default function SettingsPage() {
       <AlertSection />
       <BackupSection />
       <RescanSection />
+      <ScanExcelSection />
       <ReapplyExcelSection />
       <DbSection />
     </div>
@@ -914,6 +915,78 @@ function RescanSection() {
           <div className="px-3 py-2 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300">
             ⚠️ {error}
           </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* ─── 掃 Excel 資料夾、跑 python 出 JSON ─────────────────── */
+function ScanExcelSection() {
+  const [state, setState] = useState<'idle' | 'scanning' | 'done' | 'error'>('idle');
+  const [error, setError] = useState('');
+  const [logText, setLogText] = useState('');
+  const [folder, setFolder] = useState('');
+
+  async function go() {
+    if (!confirm('掃描 D:\\矯正\\下單Excel\\ 內的 Excel 檔，跑 python import 重新產出 dev-data JSON。\n\n完成後還要按「重新套用 Excel 匯入」才會把資料套到 IndexedDB。')) return;
+    setState('scanning');
+    setError('');
+    setLogText('');
+    const r = await scanExcel();
+    if (r.state === 'helper-down') {
+      setError('本機 helper 沒回應');
+      setState('error');
+      return;
+    }
+    if (r.state === 'error') {
+      setError(r.message);
+      setState('error');
+      return;
+    }
+    setFolder(r.excelFolder);
+    setLogText(
+      r.log
+        .map((l) => `=== ${l.script} (exit ${l.exitCode}) ===\n${l.stdout ?? ''}${l.stderr ? '\n[stderr]\n' + l.stderr : ''}${l.error ? '\n[error] ' + l.error : ''}`)
+        .join('\n\n'),
+    );
+    setState(r.success ? 'done' : 'error');
+    if (!r.success) setError('一支或兩支 python script 退出碼非 0，看下方 log。');
+  }
+
+  return (
+    <section className="rounded-xl border border-zinc-800 bg-zinc-900/30">
+      <header className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between">
+        <h2 className="text-sm font-medium text-zinc-200">掃描 Excel 資料夾</h2>
+        <button
+          onClick={go}
+          disabled={state === 'scanning'}
+          className="px-3 py-1.5 rounded-md text-xs border border-zinc-700 text-zinc-200 hover:bg-zinc-800 transition disabled:opacity-50"
+        >
+          {state === 'scanning' ? '📂 掃描中…' : '📂 立即掃描 Excel'}
+        </button>
+      </header>
+      <div className="p-5 space-y-2 text-sm">
+        <p className="text-xs text-zinc-500">
+          讀 <code className="text-zinc-400">D:\矯正\下單Excel\</code>（筆電是 C:\）的 <code className="text-zinc-400">下單紀錄.xlsx</code> 跟 <code className="text-zinc-400">補充下單紀錄.xlsx</code>，跑 python 兩支 import 重產 dev-data JSON。
+          <strong className="text-zinc-300 block mt-1">不會直接動 IndexedDB</strong>，跑完還要按下方「重新套用 Excel 匯入」才生效。
+        </p>
+        {state === 'done' && (
+          <div className="px-3 py-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs">
+            ✓ 掃描完成。現在按「重新套用 Excel 匯入」把更新套到 IndexedDB。
+            {folder && <div className="text-zinc-500 mt-1">資料夾：{folder}</div>}
+          </div>
+        )}
+        {error && (
+          <div className="px-3 py-2 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+            ⚠️ {error}
+          </div>
+        )}
+        {logText && (
+          <details className="text-xs">
+            <summary className="cursor-pointer text-zinc-500 hover:text-zinc-300">查看 python 輸出</summary>
+            <pre className="mt-2 p-3 bg-zinc-950/60 rounded text-[10px] text-zinc-400 overflow-x-auto whitespace-pre-wrap">{logText}</pre>
+          </details>
         )}
       </div>
     </section>

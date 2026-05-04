@@ -76,6 +76,36 @@ export async function checkUpdate(): Promise<CheckUpdateResult> {
   }
 }
 
+// 掃 Excel 資料夾、跑 python 兩支 import 出 JSON（更新 dev-data/excel-*.json）
+// 之後 user 還要按「重新套用 Excel 匯入」才會把 JSON 內容套到 IndexedDB
+export type ScanExcelResult =
+  | {
+      state: 'ok';
+      success: boolean;
+      excelFolder: string;
+      log: Array<{ script: string; exitCode: number; stdout?: string; stderr?: string; error?: string }>;
+    }
+  | { state: 'error'; message: string }
+  | { state: 'helper-down' };
+
+export async function scanExcel(): Promise<ScanExcelResult> {
+  try {
+    const resp = await fetch(`${HELPER_BASE}/scan-excel`);
+    if (resp.ok) {
+      const data = (await resp.json()) as {
+        success: boolean;
+        excelFolder: string;
+        log: Array<{ script: string; exitCode: number; stdout?: string; stderr?: string }>;
+      };
+      return { state: 'ok', ...data };
+    }
+    const data = (await resp.json().catch(() => ({ error: 'unknown' }))) as { error: string };
+    return { state: 'error', message: data.error };
+  } catch {
+    return { state: 'helper-down' };
+  }
+}
+
 // 跑 update.ps1 -Silent，等 1-3 分鐘
 export type RunUpdateResult =
   | { state: 'ok'; exitCode: number; stdout: string; stderr: string }

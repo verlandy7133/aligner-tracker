@@ -18,8 +18,26 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 import os
-# 補充下單紀錄 Excel 路徑，可用環境變數 ALIGNER_SUPP_XLSX 覆蓋
-EXCEL_PATH = os.environ.get('ALIGNER_SUPP_XLSX') or r'C:\Users\YOUR_USER\Downloads\補充下單紀錄.xlsx'
+# 補充下單紀錄 Excel 路徑：
+#   1. 環境變數 ALIGNER_SUPP_XLSX 直接指定
+#   2. 否則找 ${EXCEL_FOLDER}\補充下單紀錄.xlsx (預設 D:\矯正\下單Excel\)
+#   3. 最後 fallback 舊位置
+def _resolve_supp_xlsx():
+    if os.environ.get('ALIGNER_SUPP_XLSX'):
+        return os.environ['ALIGNER_SUPP_XLSX']
+    folder = os.environ.get('ALIGNER_EXCEL_FOLDER')
+    if not folder:
+        for d in (r'D:\矯正\下單Excel', r'C:\矯正\下單Excel'):
+            if os.path.isdir(d):
+                folder = d
+                break
+    if folder:
+        candidate = os.path.join(folder, '補充下單紀錄.xlsx')
+        if os.path.isfile(candidate):
+            return candidate
+    return r'C:\Users\YOUR_USER\Downloads\補充下單紀錄.xlsx'
+
+EXCEL_PATH = _resolve_supp_xlsx()
 PATIENTS_JSON = Path('dev-data/patients-import.json')
 PATIENT_UPDATES_JSON = Path('dev-data/excel-patient-updates.json')
 ORDERS_JSON = Path('dev-data/excel-orders.json')

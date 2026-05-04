@@ -22,6 +22,7 @@ import {
 } from '../config/alerts';
 
 type ViewMode = 'group' | 'date';
+type SortDir = 'asc' | 'desc';
 
 export default function OrderTracking() {
   const orders = useLiveQuery(() => db.orders.toArray()) ?? [];
@@ -53,6 +54,8 @@ export default function OrderTracking() {
 
   const alertCount = alertsByOrder.size;
   const [view, setView] = useState<ViewMode>('group');
+  // group view 按 chartNo 排、date view 按日期排；asc / desc 兩個 view 共用同一個 toggle
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [search, setSearch] = useState('');
   const [labFilter, setLabFilter] = useState<string>('all');
   const [doctorFilter, setDoctorFilter] = useState<string>('all');
@@ -117,15 +120,17 @@ export default function OrderTracking() {
       list.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
       return { key, list };
     });
-    arr.sort((a, b) => a.list[0].patientChartNo.localeCompare(b.list[0].patientChartNo));
+    const dir = sortDir === 'asc' ? 1 : -1;
+    arr.sort((a, b) => a.list[0].patientChartNo.localeCompare(b.list[0].patientChartNo) * dir);
     return arr;
-  }, [filtered, view]);
+  }, [filtered, view, sortDir]);
 
-  // Date view: flat list sorted by date desc
+  // Date view: flat list sorted by date asc/desc
   const dateSorted = useMemo(() => {
     if (view !== 'date') return null;
-    return [...filtered].sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
-  }, [filtered, view]);
+    const dir = sortDir === 'asc' ? 1 : -1;
+    return [...filtered].sort((a, b) => (a.date ?? '').localeCompare(b.date ?? '') * dir);
+  }, [filtered, view, sortDir]);
 
   function exportCsv() {
     const rows = [
@@ -174,6 +179,13 @@ export default function OrderTracking() {
             className="w-64 px-3 py-2 rounded-md bg-zinc-900/60 border border-zinc-800 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-sky-500/50"
           />
           <ViewToggle view={view} onChange={setView} />
+          <button
+            onClick={() => setSortDir(sortDir === 'asc' ? 'desc' : 'asc')}
+            className="px-3 py-2 rounded-md text-sm border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition"
+            title={view === 'group' ? '按病歷號排序' : '按日期排序'}
+          >
+            {sortDir === 'asc' ? '↑ 升冪' : '↓ 降冪'}
+          </button>
           <button
             onClick={() => setAlertSettingsOpen(true)}
             className="px-3 py-2 rounded-md text-sm border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition"

@@ -111,6 +111,88 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // 檢查 GitHub 有沒有新 commit（git fetch + 看 origin/main 比 HEAD 多幾個）
+  if (url.pathname === '/check-update') {
+    if (readRole() !== 'master') {
+      res.statusCode = 403;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'follower 不能檢查更新' }));
+      return;
+    }
+    const fetchProc = spawn('git', ['fetch', 'origin'], { cwd: PROJECT_ROOT });
+    fetchProc.on('close', (code) => {
+      if (code !== 0) {
+        res.statusCode = 500;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'git fetch 失敗 (沒網路 or git 沒裝?)' }));
+        return;
+      }
+      // 比較
+      const proc = spawn('git', ['rev-list', '--count', 'HEAD..origin/main'], { cwd: PROJECT_ROOT });
+      let out = '';
+      proc.stdout.on('data', (d) => (out += d.toString()));
+      proc.on('close', () => {
+        const behind = parseInt(out.trim(), 10) || 0;
+        // 取現在 HEAD + origin/main 的 short hash
+        const headProc = spawn('git', ['rev-parse', '--short', 'HEAD'], { cwd: PROJECT_ROOT });
+        let headHash = '';
+        headProc.stdout.on('data', (d) => (headHash += d.toString()));
+        headProc.on('close', () => {
+          const remoteProc = spawn('git', ['rev-parse', '--short', 'origin/main'], { cwd: PROJECT_ROOT });
+          let remoteHash = '';
+          remoteProc.stdout.on('data', (d) => (remoteHash += d.toString()));
+          remoteProc.on('close', () => {
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ behind, current: headHash.trim(), latest: remoteHash.trim() }));
+          });
+        });
+      });
+    });
+    fetchProc.on('error', (err) => {
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'spawn git failed: ' + err.message }));
+    });
+    return;
+  }
+
+  // 跑 update.ps1 -Silent，等完成回傳結果
+  if (url.pathname === '/run-update') {
+    if (readRole() !== 'master') {
+      res.statusCode = 403;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'follower 不能跑更新' }));
+      return;
+    }
+    const updateScript = path.join(PROJECT_ROOT, 'scripts', 'update.ps1');
+    const ps = spawn(
+      'powershell',
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', updateScript, '-Silent'],
+      { cwd: PROJECT_ROOT },
+    );
+    let stdout = '';
+    let stderr = '';
+    ps.stdout.on('data', (d) => (stdout += d.toString()));
+    ps.stderr.on('data', (d) => (stderr += d.toString()));
+    ps.on('close', (code) => {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(
+        JSON.stringify({
+          success: code === 0,
+          exitCode: code,
+          stdout: stdout.slice(-4000), // 截最後 4KB 防瀏覽器爆炸
+          stderr: stderr.slice(-2000),
+        }),
+      );
+    });
+    ps.on('error', (err) => {
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'spawn powershell failed: ' + err.message }));
+    });
+    return;
+  }
+
   // 建立資料夾（含 path remap + allowlist 守門）
   if (url.pathname === '/create-folder') {
     if (readRole() !== 'master') {

@@ -31,6 +31,7 @@ import {
   saveThresholds,
 } from '../config/alerts';
 import { seedIfEmpty, type SeedResult } from '../seed';
+import { checkUpdate, runUpdate } from '../lib/helper-client';
 
 export default function SettingsPage() {
   return (
@@ -42,6 +43,7 @@ export default function SettingsPage() {
         </p>
       </header>
 
+      <UpdateSection />
       <LabSection />
       <DoctorSection />
       <AlertSection />
@@ -50,6 +52,127 @@ export default function SettingsPage() {
       <ReapplyExcelSection />
       <DbSection />
     </div>
+  );
+}
+
+/* ─── App 更新 ─────────────────────────────────────── */
+function UpdateSection() {
+  const [roleInfo, setRoleInfo] = useState<{ role: 'master' | 'follower' } | null>(null);
+  const [checkState, setCheckState] = useState<'idle' | 'checking' | 'updating' | 'done'>('idle');
+  const [check, setCheck] = useState<{ behind: number; current: string; latest: string } | null>(null);
+  const [error, setError] = useState('');
+  const [runOutput, setRunOutput] = useState('');
+
+  useEffect(() => {
+    fetch('http://127.0.0.1:8765/role')
+      .then((r) => r.json())
+      .then((data: { role: 'master' | 'follower' }) => setRoleInfo(data))
+      .catch(() => {});
+  }, []);
+
+  async function doCheck() {
+    setCheckState('checking');
+    setError('');
+    setCheck(null);
+    const r = await checkUpdate();
+    if (r.state === 'ok') {
+      setCheck({ behind: r.behind, current: r.current, latest: r.latest });
+      setCheckState('idle');
+    } else {
+      setError(r.state === 'helper-down' ? '本機 helper 沒回應' : `檢查失敗：${r.message}`);
+      setCheckState('idle');
+    }
+  }
+
+  async function doUpdate() {
+    if (!confirm('立即更新？\n\n會跑 git pull → npm install (如需) → npm run build，1-3 分鐘。\n完成後請按 Ctrl+Shift+R 重整 App。')) return;
+    setCheckState('updating');
+    setError('');
+    setRunOutput('');
+    const r = await runUpdate();
+    if (r.state === 'ok') {
+      setRunOutput(r.stdout + (r.stderr ? '\n\n[stderr]\n' + r.stderr : ''));
+      if (r.exitCode === 0) {
+        setCheckState('done');
+        setCheck(null); // 重新檢查
+      } else {
+        setError(`更新失敗 (exit ${r.exitCode})`);
+        setCheckState('idle');
+      }
+    } else {
+      setError(r.state === 'helper-down' ? '本機 helper 沒回應' : `更新失敗：${r.message}`);
+      setCheckState('idle');
+    }
+  }
+
+  const isMaster = roleInfo?.role === 'master';
+
+  return (
+    <section className="rounded-xl border border-zinc-800 bg-zinc-900/30">
+      <header className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-medium text-zinc-200">App 更新</h2>
+          <span className="text-xs text-zinc-500">當前 v{__APP_VERSION__}</span>
+        </div>
+        {isMaster && (
+          <div className="flex gap-2">
+            <button
+              onClick={doCheck}
+              disabled={checkState !== 'idle'}
+              className="px-3 py-1.5 rounded-md text-xs border border-zinc-700 text-zinc-200 hover:bg-zinc-800 transition disabled:opacity-50"
+            >
+              {checkState === 'checking' ? '🔍 檢查中…' : '🔍 檢查更新'}
+            </button>
+            {check && check.behind > 0 && (
+              <button
+                onClick={doUpdate}
+                disabled={checkState === 'updating'}
+                className="px-3 py-1.5 rounded-md text-xs bg-sky-500/15 border border-sky-500/40 text-sky-300 hover:bg-sky-500/25 transition disabled:opacity-50"
+              >
+                {checkState === 'updating' ? '⏳ 更新中…' : `⬆ 立即更新 (${check.behind} 個 commit)`}
+              </button>
+            )}
+          </div>
+        )}
+      </header>
+      <div className="p-5 space-y-2 text-sm">
+        {!isMaster && roleInfo && (
+          <p className="text-xs text-zinc-500">
+            此機為 <strong className="text-zinc-300">{roleInfo.role}</strong>，不能從 GitHub 拉更新。程式碼從這台 push、回 master（筆電）跑更新。
+          </p>
+        )}
+        {!roleInfo && <p className="text-xs text-zinc-500">讀取本機角色中…</p>}
+        {check && check.behind === 0 && (
+          <p className="text-xs text-emerald-400">✓ 已是最新版本（{check.current}）</p>
+        )}
+        {check && check.behind > 0 && (
+          <p className="text-xs text-amber-300">
+            落後 {check.behind} 個 commit · {check.current} → {check.latest}
+          </p>
+        )}
+        {checkState === 'updating' && (
+          <p className="text-xs text-sky-300">
+            ⏳ 跑 git pull → npm install (如需) → npm run build... 1-3 分鐘，請勿關閉視窗。
+          </p>
+        )}
+        {checkState === 'done' && (
+          <div className="px-3 py-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs">
+            ✓ 更新完成。<strong>請按 Ctrl+Shift+R 重整 App 載入新版本。</strong>
+          </div>
+        )}
+        {error && (
+          <div className="px-3 py-2 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+            ⚠️ {error}
+          </div>
+        )}
+        {runOutput && (
+          <details className="text-xs">
+            <summary className="cursor-pointer text-zinc-500 hover:text-zinc-300">查看 update 輸出</summary>
+            <pre className="mt-2 p-3 bg-zinc-950/60 rounded text-[10px] text-zinc-400 overflow-x-auto whitespace-pre-wrap">{runOutput}</pre>
+          </details>
+        )}
+      </div>
+    </section>
   );
 }
 

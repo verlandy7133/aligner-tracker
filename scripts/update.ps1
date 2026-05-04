@@ -1,8 +1,12 @@
-﻿# 隱形矯正追蹤 — 一鍵更新
+﻿﻿# 隱形矯正追蹤 — 一鍵更新
 # 動作：git pull → (依賴變動才) npm install → npm run build → 提示重啟 App
 #
 # 在 D 機 (D:\dev\...) 跟筆電 (C:\dev\...) 都能跑，自動偵測。
-# 由 更新.bat 呼叫（或 PowerShell 直接跑）。
+# 由 更新.bat 呼叫、PowerShell 直接跑、或 helper service /run-update 呼叫（用 -Silent）。
+
+param(
+    [switch]$Silent  # 跳過所有 Read-Host（給 helper / 自動化用）
+)
 
 $ErrorActionPreference = 'Stop'
 $OutputEncoding = [System.Text.Encoding]::UTF8
@@ -25,7 +29,7 @@ foreach ($candidate in @('C:\dev\矯正追蹤-app', 'D:\dev\矯正追蹤-app')) 
 }
 if (-not $appDir) {
     Write-Host '❌ 找不到 App 目錄（找了 C:\dev\矯正追蹤-app 跟 D:\dev\矯正追蹤-app）' -ForegroundColor Red
-    Read-Host '按 Enter 結束'
+    if (-not $Silent) { Read-Host '按 Enter 結束' }
     exit 1
 }
 Set-Location $appDir
@@ -45,7 +49,7 @@ if ($role -ne 'master') {
     Write-Host '   程式碼從這台寫、push 上 GitHub、再去筆電（master）跑「更新.bat」。' -ForegroundColor Gray
     Write-Host '   要強制拉：手動跑 git pull 即可。' -ForegroundColor Gray
     Write-Host ''
-    Read-Host '按 Enter 結束'
+    if (-not $Silent) { Read-Host '按 Enter 結束' }
     exit 0
 }
 Write-Host "角色：$role ✓" -ForegroundColor Green
@@ -62,7 +66,7 @@ if (-not $nodeExe) {
 }
 if (-not $nodeExe) {
     Write-Host '❌ 找不到 Node.js，請先安裝：https://nodejs.org' -ForegroundColor Red
-    Read-Host '按 Enter 結束'
+    if (-not $Silent) { Read-Host '按 Enter 結束' }
     exit 1
 }
 $nodeDir = Split-Path $nodeExe -Parent
@@ -77,7 +81,7 @@ if ($dirty) {
     Write-Host $dirty -ForegroundColor Yellow
     Write-Host ''
     Write-Host '請先 commit / stash / 還原這些變動再跑更新，或回開發機處理後 push。' -ForegroundColor Yellow
-    Read-Host '按 Enter 結束'
+    if (-not $Silent) { Read-Host '按 Enter 結束' }
     exit 1
 }
 Write-Host '  ✓ 工作樹乾淨' -ForegroundColor Green
@@ -89,7 +93,7 @@ $beforeHash = (git rev-parse HEAD).Trim()
 git pull origin main
 if ($LASTEXITCODE -ne 0) {
     Write-Host '❌ git pull 失敗' -ForegroundColor Red
-    Read-Host '按 Enter 結束'
+    if (-not $Silent) { Read-Host '按 Enter 結束' }
     exit 1
 }
 $afterHash = (git rev-parse HEAD).Trim()
@@ -97,7 +101,7 @@ if ($beforeHash -eq $afterHash) {
     Write-Host ''
     Write-Host '✓ 已是最新版本，無需更新。' -ForegroundColor Green
     Write-Host ''
-    Read-Host '按 Enter 關閉'
+    if (-not $Silent) { Read-Host '按 Enter 關閉' }
     exit 0
 }
 Write-Host "  ✓ $($beforeHash.Substring(0,7)) → $($afterHash.Substring(0,7))" -ForegroundColor Green
@@ -111,7 +115,7 @@ if ($pkgChanged) {
     & $npmCmd install --legacy-peer-deps
     if ($LASTEXITCODE -ne 0) {
         Write-Host '❌ npm install 失敗' -ForegroundColor Red
-        Read-Host '按 Enter 結束'
+        if (-not $Silent) { Read-Host '按 Enter 結束' }
         exit 1
     }
     Write-Host '  ✓ npm install 完成' -ForegroundColor Green
@@ -125,7 +129,7 @@ Write-Host '[3/3] 編譯（30 秒～1 分鐘）...'
 & $npmCmd run build
 if ($LASTEXITCODE -ne 0) {
     Write-Host '❌ build 失敗' -ForegroundColor Red
-    Read-Host '按 Enter 結束'
+    if (-not $Silent) { Read-Host '按 Enter 結束' }
     exit 1
 }
 Write-Host '  ✓ build 完成' -ForegroundColor Green
@@ -155,4 +159,4 @@ Write-Host '  1. 如果 App 正在跑 → 關掉那個黑色 PS 視窗（server 
 Write-Host '  2. 雙擊桌面【隱形矯正追蹤】捷徑重新啟動'
 Write-Host '  3. 如果用 PWA → 在 App 視窗按 Ctrl+R 重整'
 Write-Host ''
-Read-Host '按 Enter 關閉'
+if (-not $Silent) { Read-Host '按 Enter 關閉' }

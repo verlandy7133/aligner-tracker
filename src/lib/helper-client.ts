@@ -56,6 +56,51 @@ export async function createFolder(path: string): Promise<CreateFolderResult> {
   }
 }
 
+// 檢查 App 有沒有更新（git fetch + 比 HEAD vs origin/main）
+export type CheckUpdateResult =
+  | { state: 'ok'; behind: number; current: string; latest: string }
+  | { state: 'error'; message: string }
+  | { state: 'helper-down' };
+
+export async function checkUpdate(): Promise<CheckUpdateResult> {
+  try {
+    const resp = await fetch(`${HELPER_BASE}/check-update`);
+    if (resp.ok) {
+      const data = (await resp.json()) as { behind: number; current: string; latest: string };
+      return { state: 'ok', ...data };
+    }
+    const data = (await resp.json().catch(() => ({ error: 'unknown' }))) as { error: string };
+    return { state: 'error', message: data.error };
+  } catch {
+    return { state: 'helper-down' };
+  }
+}
+
+// 跑 update.ps1 -Silent，等 1-3 分鐘
+export type RunUpdateResult =
+  | { state: 'ok'; exitCode: number; stdout: string; stderr: string }
+  | { state: 'error'; message: string }
+  | { state: 'helper-down' };
+
+export async function runUpdate(): Promise<RunUpdateResult> {
+  try {
+    const resp = await fetch(`${HELPER_BASE}/run-update`);
+    if (resp.ok) {
+      const data = (await resp.json()) as {
+        success: boolean;
+        exitCode: number;
+        stdout: string;
+        stderr: string;
+      };
+      return { state: 'ok', exitCode: data.exitCode, stdout: data.stdout, stderr: data.stderr };
+    }
+    const data = (await resp.json().catch(() => ({ error: 'unknown' }))) as { error: string };
+    return { state: 'error', message: data.error };
+  } catch {
+    return { state: 'helper-down' };
+  }
+}
+
 // 顯示給 user 看的訊息（toast 或 alert 用）
 export function describeHelperFailure(result: HelperResult): string | null {
   if (result.state === 'opened') return null;

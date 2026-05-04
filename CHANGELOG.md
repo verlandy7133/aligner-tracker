@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.1.6 — 2026-05-05
+
+Excel takeover 流程 + 下單追蹤完整化 + UI 細修。
+
+### 新增
+
+- **Excel takeover 改單檔兩 sheet**：`scripts/import-clinic-takeover.py` 取代舊 `import-excel-orders.py` + `import-supplementary-orders.py`
+  - 自動偵測 `D:\矯正\下單Excel\` 底下的 takeover 檔
+  - Sheet 1「生產資料庫」= 一人一列病患總表
+  - Sheet 2「牙套下單」= 一筆一列下單明細
+  - 比舊版乾淨：流程簡化、不會再忘記跑哪一支
+- **App 內掃 Excel 按鈕**：「設定 → 掃描 Excel」呼叫 helper `/scan-excel` → 自動 spawn python 重 import + 重新 derive chartNo
+- **第一次下單也算下單追蹤**：sheet 1 的「送出設計檔 X/Y」row 視為第一筆 order
+  - 新進度狀態 `設計中`（violet badge）
+  - 新 regex `(\d{1,2})/(\d{1,2})\s*送出設計檔` 抓日期
+  - 結果：order 數 414 → 470（+56 第一次下單）
+- **資料夾名生日回填**：「設定 → 從資料夾名補生日」掃所有 patient.birthday=null → 找同名資料夾 → 解析民國 YYMMDD/YYYMMDD → 自動填回
+  - 新 helper endpoint `/list-folder-names`
+  - 新 lib `parse-folder-name.ts`（4 種 patterns、status prefix strip、民國轉 ISO）
+- **下單追蹤升降冪切換**：依日期 view 加 ↑↓ 按鈕（在篩選 row 最右邊）
+- **開發機 (follower) 也能掃資料夾**：`/rescan-folders` 取消 master-only 限制，開發機可預掃驗證
+
+### 修正
+
+- **`parse_aligner_range` bug**：之前無 UL/L match 時返 `(full_text, '')`，把非下單 row 也當下單 → order 數虛高 559。改返 `('', s)`，rng 為空才正確判定為非下單 row
+- **`OrderTracking.tsx` 月度統計 / `OrderReportPage.tsx` 加「設計中」欄**
+
+### 已知問題
+
+- 53 筆 Excel-only 諮詢病患（沒有實體資料夾）birthday 仍 null，需要補建資料夾後才能回填
+- Stage B「App 點選結束自動 rename 加 [結束] 前綴」尚未實作（changelog v0.1.2 已知問題持續）
+
 ## v0.1.5 — 2026-05-04
 
 筆電 master 部署 + UI 自助化。整個 session 圍繞「讓 master 端可自更新、自調 UI」這條線。

@@ -32,6 +32,7 @@ import {
 } from '../config/alerts';
 import { seedIfEmpty, type SeedResult } from '../seed';
 import { checkUpdate, runUpdate } from '../lib/helper-client';
+import { useScale, saveScale, MIN_SCALE, MAX_SCALE, DEFAULT_SCALE } from '../lib/ui-scale';
 
 export default function SettingsPage() {
   return (
@@ -43,6 +44,7 @@ export default function SettingsPage() {
         </p>
       </header>
 
+      <UiScaleSection />
       <UpdateSection />
       <LabSection />
       <DoctorSection />
@@ -52,6 +54,75 @@ export default function SettingsPage() {
       <ReapplyExcelSection />
       <DbSection />
     </div>
+  );
+}
+
+/* ─── UI 字級 ─────────────────────────────────────── */
+const SCALE_PRESETS = [
+  { label: '小', value: 0.9 },
+  { label: '正常', value: 1.0 },
+  { label: '大', value: 1.15 },
+  { label: '特大', value: 1.3 },
+  { label: '巨大', value: 1.5 },
+];
+
+function UiScaleSection() {
+  const scale = useScale();
+  return (
+    <section className="rounded-xl border border-zinc-800 bg-zinc-900/30">
+      <header className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-medium text-zinc-200">字級大小</h2>
+          <span className="text-xs text-zinc-500">當前 {Math.round(scale * 100)}%</span>
+        </div>
+        <button
+          onClick={() => saveScale(DEFAULT_SCALE)}
+          disabled={scale === DEFAULT_SCALE}
+          className="px-3 py-1.5 rounded-md text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 transition disabled:opacity-50"
+        >
+          重設
+        </button>
+      </header>
+      <div className="p-5 space-y-3">
+        <div className="flex flex-wrap gap-2">
+          {SCALE_PRESETS.map((p) => {
+            const active = Math.abs(scale - p.value) < 0.01;
+            return (
+              <button
+                key={p.value}
+                onClick={() => saveScale(p.value)}
+                className={`px-4 py-2 rounded-md border transition ${
+                  active
+                    ? 'bg-sky-500/15 border-sky-500/40 text-sky-300'
+                    : 'bg-zinc-900/40 border-zinc-800 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800/60'
+                }`}
+                style={{ fontSize: `${p.value}rem` }}
+              >
+                {p.label} ({Math.round(p.value * 100)}%)
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-zinc-500 w-12">微調</span>
+          <input
+            type="range"
+            min={MIN_SCALE * 100}
+            max={MAX_SCALE * 100}
+            step={5}
+            value={Math.round(scale * 100)}
+            onChange={(e) => saveScale(Number(e.target.value) / 100)}
+            className="flex-1 accent-sky-500"
+          />
+          <span className="tabular text-xs text-zinc-400 w-12 text-right">
+            {Math.round(scale * 100)}%
+          </span>
+        </div>
+        <p className="text-xs text-zinc-500">
+          影響整個 App 字級。改完即時生效、自動存。下次開 App 沿用上次設定。
+        </p>
+      </div>
+    </section>
   );
 }
 

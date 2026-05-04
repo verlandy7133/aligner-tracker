@@ -8,12 +8,15 @@ import SettingsPage from './pages/SettingsPage';
 import ThemeSelector from './components/ThemeSelector';
 import { seedIfEmpty } from './seed';
 import { useTheme } from './themes';
+import { initScale } from './lib/ui-scale';
 
 export default function App() {
   useTheme(); // 套用儲存的主題
   useEffect(() => {
     // 一次性 seed (singleton 內部已有 race guard)
     seedIfEmpty();
+    // 套用儲存的 UI 字級 scale
+    initScale();
   }, []);
 
   return (

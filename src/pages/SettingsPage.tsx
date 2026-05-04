@@ -851,7 +851,8 @@ function RescanSection() {
   }
 
   const isMaster = roleInfo?.role === 'master';
-  const canScan = isMaster && roleInfo?.scanFolderExists === true;
+  // 不再限制 master only — 兩台機器都能掃自己本地的 病患資料夾
+  const canScan = roleInfo?.scanFolderExists === true;
 
   return (
     <section className="rounded-xl border border-zinc-800 bg-zinc-900/30">
@@ -885,7 +886,7 @@ function RescanSection() {
           </p>
         )}
         {!roleInfo && !roleError && <p className="text-xs text-zinc-500">讀取本機角色中…</p>}
-        {roleInfo && isMaster && (
+        {roleInfo && (
           <p className="text-xs text-zinc-500">
             掃描 <code className="text-zinc-400">{roleInfo.scanFolder}</code> 找新病患資料夾，
             <strong className="text-zinc-300">只新增不存在的</strong>（用姓名+生日比對），不會動既有編輯。
@@ -894,15 +895,12 @@ function RescanSection() {
                 ⚠️ 上述路徑不存在，無法掃描。請先把 矯正/ 資料夾搬到該位置。
               </span>
             )}
+            {!isMaster && (
+              <span className="block mt-1 text-zinc-600">
+                提醒：此機為 follower。掃描出來的資料只在本機 IndexedDB；要跟 master 同步，請各自匯出 backup JSON 對賬。
+              </span>
+            )}
           </p>
-        )}
-        {roleInfo && !isMaster && (
-          <div className="px-3 py-2 rounded-md bg-zinc-800/50 border border-zinc-700 text-xs text-zinc-400 space-y-1">
-            <p>
-              <strong className="text-zinc-300">此機為開發機（follower）</strong>，停用資料夾掃描以免跟筆電 (master) 不同步。
-            </p>
-            <p>新增病患請：在筆電上掃描或手動新增 → 筆電匯出備份 JSON → 在本機「資料備份/還原」section 匯入。</p>
-          </div>
         )}
         {state === 'done' && result && (
           <div className="px-3 py-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">

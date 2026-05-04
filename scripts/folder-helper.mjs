@@ -66,17 +66,7 @@ const server = http.createServer((req, res) => {
   }
 
   if (url.pathname === '/rescan-folders') {
-    if (readRole() !== 'master') {
-      res.statusCode = 403;
-      res.setHeader('Content-Type', 'application/json');
-      res.end(
-        JSON.stringify({
-          error:
-            '此機角色為 follower，禁止掃描資料夾。新增病患請在筆電 (master) 操作後匯出備份還原。',
-        }),
-      );
-      return;
-    }
+    // 注：scan 不再限制 master only — 開發機跟筆電都可掃自己的資料夾
     // 跑 scan script (用當前 node)，產生最新 patients-import.json，回傳給前端
     const child = spawn(process.execPath, [SCAN_SCRIPT], {
       cwd: PROJECT_ROOT,

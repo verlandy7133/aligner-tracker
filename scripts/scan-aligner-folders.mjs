@@ -22,9 +22,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-// ─── role guard ──────────────────────────────────────────
-// dev-data/clinic-role.txt 內容必須是 "master" 才允許掃描。
-// follower（開發機）只能透過 backup JSON 還原狀態，不該動 IndexedDB seed。
+// ─── role 顯示 (不再 enforce) ─────────────────────────────
+// 之前限制只有 master 能掃，但開發機 + 筆電都可能要 scan 自己的本地資料夾。
+// 現在純粹印當前角色當資訊、不擋。
 const ROLE_FILE = path.resolve('dev-data/clinic-role.txt');
 let role = 'follower';
 try {
@@ -32,13 +32,7 @@ try {
 } catch {
   // 檔不存在 → follower 預設
 }
-if (role !== 'master') {
-  console.error(
-    `[scan] 此機角色為 ${role}（檢查 ${ROLE_FILE}），拒絕掃描以免污染資料。\n` +
-      `       新增病患請在筆電 (master) 上做、再匯出 backup JSON 到開發機還原。`,
-  );
-  process.exit(1);
-}
+console.log(`[scan] 角色 = ${role}`);
 
 // ─── 自動偵測安裝碟 ──────────────────────────────────────
 const DRIVE = fs.existsSync('D:\\矯正') ? 'D:' : (process.env.SystemDrive || 'C:');

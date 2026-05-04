@@ -6,7 +6,7 @@ import type { Order, Patient } from './types/Patient';
 
 export type SeedResult =
   | { seeded: true; patientCount: number; orderCount: number; updates: number; newPatients: number }
-  | { seeded: false; reason: 'not-dev' | 'already-has-data' | 'no-seed-file' | 'error'; count?: number; error?: string };
+  | { seeded: false; reason: 'already-has-data' | 'no-seed-file' | 'error'; count?: number; error?: string };
 
 let inflight: Promise<SeedResult> | null = null;
 
@@ -20,8 +20,9 @@ async function doSeed(): Promise<SeedResult> {
   await ensureDefaultLabsSeeded();
   await ensureDefaultDoctorsSeeded();
 
-  if (!import.meta.env.DEV) return { seeded: false, reason: 'not-dev' };
-
+  // 之前有 `if (!import.meta.env.DEV) return` 限制只在 dev 模式 seed
+  // 但 vite preview (production) 下 DEV=false → 清空 DB 後不會自動 seed
+  // 既然 dev-data JSON 在 build 時被 bundle 進 dist，就讓 prod 也能 seed
   const existing = await db.patients.count();
   if (existing > 0) return { seeded: false, reason: 'already-has-data', count: existing };
 

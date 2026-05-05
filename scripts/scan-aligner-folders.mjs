@@ -34,10 +34,27 @@ try {
 }
 console.log(`[scan] 角色 = ${role}`);
 
-// ─── 自動偵測安裝碟 ──────────────────────────────────────
-const DRIVE = fs.existsSync('D:\\矯正') ? 'D:' : (process.env.SystemDrive || 'C:');
-const ROOT = `${DRIVE}\\矯正\\病患資料夾`;
+// ─── 資料根路徑偵測 ──────────────────────────────────────
+// 優先序：
+//   1. env ALIGNER_DATA_ROOT（helper service 從 clinic-paths.json 讀進來）
+//   2. clinic-paths.json (dataRoot 欄)
+//   3. fallback {DRIVE}\矯正
+function resolveDataRoot() {
+  const fromEnv = process.env.ALIGNER_DATA_ROOT;
+  if (fromEnv && fs.existsSync(fromEnv)) return fromEnv;
+  try {
+    const cfg = JSON.parse(fs.readFileSync('dev-data/clinic-paths.json', 'utf8'));
+    if (typeof cfg.dataRoot === 'string' && fs.existsSync(cfg.dataRoot)) return cfg.dataRoot;
+  } catch {
+    // 沒設定就 fallback
+  }
+  const drive = fs.existsSync('D:\\矯正') ? 'D:' : (process.env.SystemDrive || 'C:');
+  return `${drive}\\矯正`;
+}
+const DATA_ROOT = resolveDataRoot();
+const ROOT = path.join(DATA_ROOT, '病患資料夾');
 const OUT = 'dev-data/patients-import.json';
+console.log(`[scan] dataRoot = ${DATA_ROOT}`);
 
 // ─── 前綴 → status/productLine 映射 ──────────────────────
 const PREFIX_RULES = [

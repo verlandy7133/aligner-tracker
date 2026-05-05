@@ -145,6 +145,144 @@ export async function runUpdate(): Promise<RunUpdateResult> {
   }
 }
 
+// ─── 路徑設定（NAS 路徑等）─────────────────────────
+export type ClinicPaths = {
+  dataRoot: string;
+  syncFile: string;
+};
+
+export type GetPathsResult =
+  | { state: 'ok'; paths: ClinicPaths; pathsFile: string; pathsFileExists: boolean }
+  | { state: 'error'; message: string }
+  | { state: 'helper-down' };
+
+export async function getPaths(): Promise<GetPathsResult> {
+  try {
+    const resp = await fetch(`${HELPER_BASE}/paths`);
+    if (resp.ok) {
+      const data = (await resp.json()) as ClinicPaths & { pathsFile: string; pathsFileExists: boolean };
+      return { state: 'ok', paths: { dataRoot: data.dataRoot, syncFile: data.syncFile }, pathsFile: data.pathsFile, pathsFileExists: data.pathsFileExists };
+    }
+    return { state: 'error', message: await resp.text() };
+  } catch {
+    return { state: 'helper-down' };
+  }
+}
+
+export type SavePathsResult =
+  | { state: 'ok'; paths: ClinicPaths; hint: string }
+  | { state: 'error'; message: string }
+  | { state: 'helper-down' };
+
+export async function savePaths(paths: ClinicPaths): Promise<SavePathsResult> {
+  try {
+    const resp = await fetch(`${HELPER_BASE}/paths`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(paths),
+    });
+    if (resp.ok) {
+      const data = (await resp.json()) as { ok: boolean; paths: ClinicPaths; hint: string };
+      return { state: 'ok', paths: data.paths, hint: data.hint };
+    }
+    const data = (await resp.json().catch(() => ({ error: 'unknown' }))) as { error: string };
+    return { state: 'error', message: data.error };
+  } catch {
+    return { state: 'helper-down' };
+  }
+}
+
+// ─── 跨機同步：sync.json 在 NAS / Dropbox 上 ─────────
+export type SyncStat = {
+  configured: boolean;
+  exists: boolean;
+  syncFile: string;
+  mtime: string; // ISO
+  size: number;
+};
+
+export type SyncStatResult =
+  | { state: 'ok'; stat: SyncStat }
+  | { state: 'not-configured' }
+  | { state: 'not-exists'; syncFile: string }
+  | { state: 'error'; message: string }
+  | { state: 'helper-down' };
+
+export async function syncStat(): Promise<SyncStatResult> {
+  try {
+    const resp = await fetch(`${HELPER_BASE}/sync-stat`);
+    if (resp.ok) {
+      const data = (await resp.json()) as SyncStat;
+      return { state: 'ok', stat: data };
+    }
+    if (resp.status === 400) {
+      return { state: 'not-configured' };
+    }
+    if (resp.status === 404) {
+      const data = (await resp.json().catch(() => ({}))) as { syncFile?: string };
+      return { state: 'not-exists', syncFile: data.syncFile ?? '' };
+    }
+    const data = (await resp.json().catch(() => ({ error: 'unknown' }))) as { error: string };
+    return { state: 'error', message: data.error };
+  } catch {
+    return { state: 'helper-down' };
+  }
+}
+
+export type SyncReadResult =
+  | { state: 'ok'; content: string; mtime: string; size: number }
+  | { state: 'not-configured' }
+  | { state: 'not-exists' }
+  | { state: 'error'; message: string }
+  | { state: 'helper-down' };
+
+export async function syncRead(): Promise<SyncReadResult> {
+  try {
+    const resp = await fetch(`${HELPER_BASE}/sync-read`);
+    if (resp.ok) {
+      const content = await resp.text();
+      const mtime = resp.headers.get('X-Sync-Mtime') ?? '';
+      const size = parseInt(resp.headers.get('X-Sync-Size') ?? '0', 10);
+      return { state: 'ok', content, mtime, size };
+    }
+    if (resp.status === 400) return { state: 'not-configured' };
+    if (resp.status === 404) return { state: 'not-exists' };
+    const data = (await resp.json().catch(() => ({ error: 'unknown' }))) as { error: string };
+    return { state: 'error', message: data.error };
+  } catch {
+    return { state: 'helper-down' };
+  }
+}
+
+export type SyncWriteResult =
+  | { state: 'ok'; mtime: string; size: number; syncFile: string }
+  | { state: 'not-configured' }
+  | { state: 'error'; message: string }
+  | { state: 'helper-down' };
+
+export async function syncWrite(jsonContent: string): Promise<SyncWriteResult> {
+  try {
+    const resp = await fetch(`${HELPER_BASE}/sync-write`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: jsonContent,
+    });
+    if (resp.ok) {
+      const data = (await resp.json()) as { ok: boolean; mtime: string; size: number; syncFile: string };
+      return { state: 'ok', mtime: data.mtime, size: data.size, syncFile: data.syncFile };
+    }
+    if (resp.status === 400) {
+      const data = (await resp.json().catch(() => ({ error: 'unknown' }))) as { error: string };
+      if (data.error?.includes('syncFile')) return { state: 'not-configured' };
+      return { state: 'error', message: data.error };
+    }
+    const data = (await resp.json().catch(() => ({ error: 'unknown' }))) as { error: string };
+    return { state: 'error', message: data.error };
+  } catch {
+    return { state: 'helper-down' };
+  }
+}
+
 // 顯示給 user 看的訊息（toast 或 alert 用）
 export function describeHelperFailure(result: HelperResult): string | null {
   if (result.state === 'opened') return null;

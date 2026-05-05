@@ -31,7 +31,18 @@ import {
   saveThresholds,
 } from '../config/alerts';
 import { seedIfEmpty, type SeedResult } from '../seed';
-import { checkUpdate, runUpdate, scanExcel, listFolderNames } from '../lib/helper-client';
+import {
+  checkUpdate,
+  runUpdate,
+  scanExcel,
+  listFolderNames,
+  getPaths,
+  savePaths,
+  syncStat,
+  syncRead,
+  syncWrite,
+  type ClinicPaths,
+} from '../lib/helper-client';
 import { parseFolderName } from '../lib/parse-folder-name';
 import { useScale, saveScale, MIN_SCALE, MAX_SCALE, DEFAULT_SCALE } from '../lib/ui-scale';
 
@@ -47,6 +58,8 @@ export default function SettingsPage() {
 
       <UiScaleSection />
       <UpdateSection />
+      <PathsSection />
+      <SyncSection />
       <LabSection />
       <DoctorSection />
       <AlertSection />
@@ -248,6 +261,419 @@ function UpdateSection() {
       </div>
     </section>
   );
+}
+
+/* ─── 路徑設定（NAS / 本機路徑）──────────────────────────── */
+function PathsSection() {
+  const [paths, setPaths] = useState<ClinicPaths>({ dataRoot: '', syncFile: '' });
+  const [originalPaths, setOriginalPaths] = useState<ClinicPaths>({ dataRoot: '', syncFile: '' });
+  const [pathsFile, setPathsFile] = useState('');
+  const [pathsFileExists, setPathsFileExists] = useState(false);
+  const [roleInfo, setRoleInfo] = useState<{ role: 'master' | 'follower' } | null>(null);
+  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [error, setError] = useState('');
+  const [hint, setHint] = useState('');
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    fetch('http://127.0.0.1:8765/role')
+      .then((r) => r.json())
+      .then((data: { role: 'master' | 'follower' }) => setRoleInfo(data))
+      .catch(() => {});
+    getPaths().then((r) => {
+      if (r.state === 'ok') {
+        setPaths(r.paths);
+        setOriginalPaths(r.paths);
+        setPathsFile(r.pathsFile);
+        setPathsFileExists(r.pathsFileExists);
+      }
+    });
+  }, []);
+
+  async function save() {
+    setState('saving');
+    setError('');
+    setHint('');
+    if (!paths.dataRoot.trim()) {
+      setError('資料根目錄必填');
+      setState('error');
+      return;
+    }
+    const r = await savePaths({ dataRoot: paths.dataRoot.trim(), syncFile: paths.syncFile.trim() });
+    if (r.state === 'ok') {
+      setOriginalPaths(r.paths);
+      setPathsFileExists(true);
+      setHint(r.hint);
+      setState('saved');
+      setTimeout(() => setState('idle'), 3000);
+    } else if (r.state === 'helper-down') {
+      setError('helper 沒回應');
+      setState('error');
+    } else {
+      setError(r.message);
+      setState('error');
+    }
+  }
+
+  const isMaster = roleInfo?.role === 'master';
+  const dirty = paths.dataRoot !== originalPaths.dataRoot || paths.syncFile !== originalPaths.syncFile;
+
+  return (
+    <section className="rounded-xl border border-zinc-800 bg-zinc-900/30">
+      <header
+        onClick={() => setExpanded(!expanded)}
+        className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between cursor-pointer hover:bg-zinc-800/30 transition"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-zinc-500 text-xs w-3">{expanded ? '▾' : '▸'}</span>
+          <h2 className="text-sm font-medium text-zinc-200">路徑設定</h2>
+          {!expanded && (
+            <span className="text-[11px] text-zinc-500 truncate max-w-[480px]">
+              資料根：<code className="text-zinc-400">{originalPaths.dataRoot || '(預設)'}</code>
+              {originalPaths.syncFile && <> · 同步檔：<code className="text-zinc-400">{originalPaths.syncFile}</code></>}
+            </span>
+          )}
+        </div>
+        {expanded && isMaster && (
+          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            {state === 'saved' && <span className="text-xs text-emerald-400">✓ 已儲存</span>}
+            <button
+              onClick={save}
+              disabled={state === 'saving' || !dirty}
+              className="px-3 py-1.5 rounded-md text-xs bg-sky-500 text-zinc-950 font-medium hover:bg-sky-400 transition disabled:opacity-50"
+            >
+              {state === 'saving' ? '儲存中…' : '儲存'}
+            </button>
+          </div>
+        )}
+      </header>
+      {expanded && (
+        <div className="p-5 space-y-4">
+          {!isMaster && roleInfo && (
+            <div className="px-3 py-2 rounded-md bg-zinc-800/40 border border-zinc-700/40 text-xs text-zinc-400">
+              此機為 <strong className="text-zinc-300">{roleInfo.role}</strong>，不能改路徑（讀 dev-data/clinic-paths.json）。
+            </div>
+          )}
+          <label className="block">
+            <div className="text-xs text-zinc-300 mb-1 font-medium">資料根目錄（dataRoot）</div>
+            <input
+              value={paths.dataRoot}
+              onChange={(e) => setPaths({ ...paths, dataRoot: e.target.value })}
+              disabled={!isMaster}
+              placeholder="例：Z:\矯正追蹤  或  D:\矯正"
+              className="w-full h-9 px-3 rounded-md bg-zinc-900/60 border border-zinc-800 text-sm text-zinc-200 font-mono focus:outline-none focus:border-sky-500/50 disabled:opacity-60"
+            />
+            <div className="text-[11px] text-zinc-500 mt-1">
+              底下要有 <code>病患資料夾\</code> <code>病患授權書\</code> <code>下單Excel\</code>。NAS 接好後改成 <code>Z:\矯正追蹤</code> 之類。
+            </div>
+          </label>
+          <label className="block">
+            <div className="text-xs text-zinc-300 mb-1 font-medium">跨機同步檔位置（syncFile）</div>
+            <input
+              value={paths.syncFile}
+              onChange={(e) => setPaths({ ...paths, syncFile: e.target.value })}
+              disabled={!isMaster}
+              placeholder="例：Z:\矯正追蹤\sync.json（留空 = 不啟用跨機同步）"
+              className="w-full h-9 px-3 rounded-md bg-zinc-900/60 border border-zinc-800 text-sm text-zinc-200 font-mono focus:outline-none focus:border-sky-500/50 disabled:opacity-60"
+            />
+            <div className="text-[11px] text-zinc-500 mt-1">
+              兩台 Windows 機都指向同個 NAS 路徑。離開機器前點「📤 推到 NAS」、抵達另一台點「📥 從 NAS 拉」。
+            </div>
+          </label>
+          {error && (
+            <div className="px-3 py-2 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+              ⚠️ {error}
+            </div>
+          )}
+          {hint && state === 'saved' && (
+            <div className="px-3 py-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs">
+              ✓ {hint}
+            </div>
+          )}
+          <div className="text-[11px] text-zinc-500 pt-2 border-t border-zinc-800">
+            設定檔位置：<code className="text-zinc-400">{pathsFile}</code>
+            {!pathsFileExists && <span className="text-zinc-600"> · 尚未建立（會用 fallback 預設）</span>}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ─── 跨機同步（推 / 拉 NAS sync.json）─────────────────── */
+const SYNC_LAST_PUSHED_KEY = 'aligner-sync-last-pushed';
+const SYNC_LAST_PULLED_KEY = 'aligner-sync-last-pulled';
+
+function SyncSection() {
+  const [stat, setStat] = useState<{
+    state: 'loading' | 'not-configured' | 'not-exists' | 'helper-down' | 'ok' | 'error';
+    mtime?: string;
+    size?: number;
+    syncFile?: string;
+    error?: string;
+  }>({ state: 'loading' });
+  const [busy, setBusy] = useState<'idle' | 'pushing' | 'pulling'>('idle');
+  const [msg, setMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
+  const [pendingPull, setPendingPull] = useState<{
+    mtime: string;
+    counts: { patients: number; orders: number; settings: number };
+  } | null>(null);
+
+  const lastPushedAt = localStorage.getItem(SYNC_LAST_PUSHED_KEY);
+  const lastPulledAt = localStorage.getItem(SYNC_LAST_PULLED_KEY);
+
+  async function refreshStat() {
+    setStat({ state: 'loading' });
+    const r = await syncStat();
+    if (r.state === 'ok') {
+      setStat({
+        state: 'ok',
+        mtime: r.stat.mtime,
+        size: r.stat.size,
+        syncFile: r.stat.syncFile,
+      });
+    } else if (r.state === 'not-configured') {
+      setStat({ state: 'not-configured' });
+    } else if (r.state === 'not-exists') {
+      setStat({ state: 'not-exists', syncFile: r.syncFile });
+    } else if (r.state === 'helper-down') {
+      setStat({ state: 'helper-down' });
+    } else {
+      setStat({ state: 'error', error: r.message });
+    }
+  }
+
+  useEffect(() => {
+    refreshStat();
+  }, []);
+
+  async function doPush() {
+    setBusy('pushing');
+    setMsg(null);
+    try {
+      const backup = await exportBackup();
+      const json = JSON.stringify(backup, null, 2);
+      const r = await syncWrite(json);
+      if (r.state === 'ok') {
+        localStorage.setItem(SYNC_LAST_PUSHED_KEY, new Date().toISOString());
+        setMsg({ type: 'ok', text: `✓ 已推到 ${r.syncFile}（${formatSize(r.size)}）` });
+        await refreshStat();
+      } else if (r.state === 'not-configured') {
+        setMsg({ type: 'error', text: '尚未設定 syncFile，請去上面「路徑設定」填' });
+      } else if (r.state === 'helper-down') {
+        setMsg({ type: 'error', text: 'helper 沒回應' });
+      } else {
+        setMsg({ type: 'error', text: r.message });
+      }
+    } catch (e) {
+      setMsg({ type: 'error', text: e instanceof Error ? e.message : String(e) });
+    }
+    setBusy('idle');
+  }
+
+  async function doPullPreview() {
+    setBusy('pulling');
+    setMsg(null);
+    setPendingPull(null);
+    const r = await syncRead();
+    if (r.state === 'ok') {
+      const validation = validateBackup(r.content);
+      if (!validation.ok) {
+        setMsg({ type: 'error', text: `sync.json 格式錯誤：${validation.error}` });
+        setBusy('idle');
+        return;
+      }
+      setPendingPull({ mtime: r.mtime, counts: validation.file.counts });
+    } else if (r.state === 'not-configured') {
+      setMsg({ type: 'error', text: '尚未設定 syncFile' });
+    } else if (r.state === 'not-exists') {
+      setMsg({ type: 'error', text: 'NAS 上還沒有 sync.json — 在另一台先推一次' });
+    } else if (r.state === 'helper-down') {
+      setMsg({ type: 'error', text: 'helper 沒回應' });
+    } else {
+      setMsg({ type: 'error', text: r.message });
+    }
+    setBusy('idle');
+  }
+
+  async function doPullConfirm() {
+    if (!pendingPull) return;
+    if (
+      !confirm(
+        `⚠️ 從 NAS 拉資料會覆寫本機現有 IndexedDB。\n\n將載入：${pendingPull.counts.patients} 病患 / ${pendingPull.counts.orders} 下單 / ${pendingPull.counts.settings} 設定\n\nNAS 檔修改於 ${new Date(pendingPull.mtime).toLocaleString('zh-TW')}\n\n確定？`,
+      )
+    )
+      return;
+    setBusy('pulling');
+    setMsg(null);
+    try {
+      const r = await syncRead();
+      if (r.state !== 'ok') {
+        setMsg({ type: 'error', text: 'sync-read 失敗（剛才驗證後又失敗了？）' });
+        setBusy('idle');
+        return;
+      }
+      const validation = validateBackup(r.content);
+      if (!validation.ok) {
+        setMsg({ type: 'error', text: validation.error });
+        setBusy('idle');
+        return;
+      }
+      await importBackup(validation.file);
+      localStorage.setItem(SYNC_LAST_PULLED_KEY, new Date().toISOString());
+      setMsg({ type: 'ok', text: '✓ 已從 NAS 拉並還原。重整頁面套用…' });
+      setPendingPull(null);
+      setTimeout(() => location.reload(), 800);
+    } catch (e) {
+      setMsg({ type: 'error', text: e instanceof Error ? e.message : String(e) });
+      setBusy('idle');
+    }
+  }
+
+  // 計算「NAS 是否比本地新」— 用「上次推送」當基準（last pushed = 本地最後一次推上去的時間）
+  // 如果 NAS mtime > lastPushed 而且 NAS mtime > lastPulled → 有別人推了新版（紅點）
+  const nasNewer = (() => {
+    if (stat.state !== 'ok' || !stat.mtime) return false;
+    const nas = new Date(stat.mtime).getTime();
+    const lp = lastPushedAt ? new Date(lastPushedAt).getTime() : 0;
+    const lpu = lastPulledAt ? new Date(lastPulledAt).getTime() : 0;
+    // NAS 比本地兩個基準時間都更新 = 有人在另一台推了
+    return nas > Math.max(lp, lpu) + 5000; // +5s 緩衝避免自己剛推完誤判
+  })();
+
+  return (
+    <section className="rounded-xl border border-zinc-800 bg-zinc-900/30">
+      <header className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-medium text-zinc-200">跨機同步</h2>
+          {nasNewer && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse">
+              ● NAS 有新版
+            </span>
+          )}
+          {stat.state === 'ok' && !nasNewer && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+              已同步
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={refreshStat}
+            disabled={busy !== 'idle'}
+            className="px-2 py-1.5 rounded-md text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition disabled:opacity-50"
+            title="重新檢查 NAS 狀態"
+          >
+            ⟳
+          </button>
+          <button
+            onClick={doPush}
+            disabled={busy !== 'idle' || stat.state === 'not-configured' || stat.state === 'helper-down'}
+            className="px-3 py-1.5 rounded-md text-xs bg-sky-500/15 border border-sky-500/40 text-sky-300 hover:bg-sky-500/25 transition disabled:opacity-50"
+          >
+            {busy === 'pushing' ? '推送中…' : '📤 推到 NAS'}
+          </button>
+          <button
+            onClick={doPullPreview}
+            disabled={busy !== 'idle' || stat.state === 'not-configured' || stat.state === 'not-exists' || stat.state === 'helper-down'}
+            className={`px-3 py-1.5 rounded-md text-xs border transition disabled:opacity-50 ${
+              nasNewer
+                ? 'bg-rose-500/15 border-rose-500/40 text-rose-300 hover:bg-rose-500/25'
+                : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800'
+            }`}
+          >
+            {busy === 'pulling' ? '處理中…' : '📥 從 NAS 拉'}
+          </button>
+        </div>
+      </header>
+      <div className="p-5 space-y-2 text-sm">
+        {stat.state === 'loading' && <p className="text-xs text-zinc-500">讀取 NAS 狀態中…</p>}
+        {stat.state === 'not-configured' && (
+          <p className="text-xs text-amber-300/80">
+            ⚠️ 尚未設定同步檔位置。請先到上面「路徑設定」填 syncFile（例 <code>Z:\矯正追蹤\sync.json</code>）。
+          </p>
+        )}
+        {stat.state === 'not-exists' && (
+          <p className="text-xs text-zinc-500">
+            NAS 上還沒有 sync.json (<code className="text-zinc-400">{stat.syncFile}</code>)。
+            按「📤 推到 NAS」第一次推上去就會建立。
+          </p>
+        )}
+        {stat.state === 'helper-down' && (
+          <p className="text-xs text-rose-300">⚠️ helper service 沒回應</p>
+        )}
+        {stat.state === 'error' && (
+          <p className="text-xs text-rose-300">⚠️ {stat.error}</p>
+        )}
+        {stat.state === 'ok' && (
+          <div className="space-y-1 text-xs">
+            <div className="text-zinc-500">
+              NAS 同步檔：<code className="text-zinc-400">{stat.syncFile}</code>
+            </div>
+            <div className="text-zinc-500">
+              NAS 修改於：<span className="text-zinc-300 tabular">{stat.mtime ? new Date(stat.mtime).toLocaleString('zh-TW') : '—'}</span>
+              {' · '}大小：<span className="text-zinc-300 tabular">{stat.size ? formatSize(stat.size) : '—'}</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 pt-2 border-t border-zinc-800">
+              <div className="text-zinc-500">
+                本機上次推送：<span className="text-zinc-300 tabular">{lastPushedAt ? new Date(lastPushedAt).toLocaleString('zh-TW') : '從未'}</span>
+              </div>
+              <div className="text-zinc-500">
+                本機上次拉取：<span className="text-zinc-300 tabular">{lastPulledAt ? new Date(lastPulledAt).toLocaleString('zh-TW') : '從未'}</span>
+              </div>
+            </div>
+          </div>
+        )}
+        {msg && (
+          <div
+            className={`px-3 py-2 rounded-md border text-xs ${
+              msg.type === 'ok'
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+            }`}
+          >
+            {msg.text}
+          </div>
+        )}
+        {pendingPull && (
+          <div className="px-3 py-3 rounded-md bg-amber-500/10 border border-amber-500/40 text-amber-200 space-y-2">
+            <div className="text-sm">
+              <strong>準備從 NAS 拉：</strong>
+              {pendingPull.counts.patients} 病患 · {pendingPull.counts.orders} 下單 · {pendingPull.counts.settings} 設定
+            </div>
+            <div className="text-xs text-amber-300/80">
+              NAS 修改於：{new Date(pendingPull.mtime).toLocaleString('zh-TW')}
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={doPullConfirm}
+                disabled={busy !== 'idle'}
+                className="px-3 py-1.5 rounded-md text-xs bg-rose-500 text-zinc-50 hover:bg-rose-400 transition disabled:opacity-50"
+              >
+                ⚠ 確認覆寫本機
+              </button>
+              <button
+                onClick={() => setPendingPull(null)}
+                disabled={busy !== 'idle'}
+                className="px-3 py-1.5 rounded-md text-xs border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition disabled:opacity-50"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        )}
+        <p className="text-[11px] text-zinc-500 pt-2 border-t border-zinc-800">
+          SOP：離開機器前點「📤 推到 NAS」 → 換到另一台 → 看到紅點「● NAS 有新版」 → 點「📥 從 NAS 拉」 → 接著用。
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
 /* ─── 技工所管理 ───────────────────────────────────────── */

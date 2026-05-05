@@ -1,5 +1,47 @@
 # Changelog
 
+## v0.1.7 — 2026-05-05
+
+NAS-ready 跨機同步基礎建設。樓上樓下兩台 Windows 機共用 NAS 上的 sync.json。
+
+### 新增
+
+- **路徑設定 section**（設定 → 路徑設定）
+  - `dataRoot`（資料根目錄）+ `syncFile`（跨機同步檔位置）兩個欄位
+  - master only 可改、follower 唯讀顯示
+  - 寫入 `dev-data/clinic-paths.json`（git-ignored、各機獨立）
+  - NAS 來了改成 `Z:\矯正追蹤` + `Z:\矯正追蹤\sync.json` 即可
+- **跨機同步 section**（設定 → 跨機同步）
+  - 「📤 推到 NAS」一鍵把整個 IndexedDB 序列化寫到 NAS sync.json（同 backup 格式）
+  - 「📥 從 NAS 拉」讀 NAS sync.json 預覽 + 確認後 importBackup 覆寫本機
+  - 顯示 NAS 修改時間 / 檔案大小、本機上次推送 / 拉取時間
+  - 自動偵測「NAS 比本地新」 → 紅色 pulse 徽章「● NAS 有新版」+ 拉按鈕變紅
+- **Nav 紅點提示** — App 啟動 + window focus 時呼叫 `/sync-stat`，NAS 有新版時 ⚙ 設定旁長出紅點
+- **helper 加 4 個 endpoints**：
+  - `GET /paths` 讀路徑設定
+  - `POST /paths` 寫路徑設定（master only）
+  - `GET /sync-stat` 回 syncFile mtime / size
+  - `GET /sync-read` 串流 sync.json 內容
+  - `POST /sync-write` 原子寫 sync.json（先寫 .tmp 再 rename）
+- **`scan-aligner-folders.mjs` 接 `ALIGNER_DATA_ROOT` env** 或讀 clinic-paths.json，從寫死 `D:\矯正` 改成可設定路徑
+
+### 修正 / 重構
+
+- **helper service 動態 allowlist** — ALLOWED_ROOTS 從寫死改成從 clinic-paths.json 動態組（dataRoot + syncFile dir + dev folder + 向後相容 fallback）
+- **helper `/role` 多回 syncFile** 給前端 hint
+- **5 個 sync 相關 helper-client wrappers** + TS types（`getPaths` `savePaths` `syncStat` `syncRead` `syncWrite`）
+
+### 設計筆記
+
+- **「不會同時用」前提**：紅點偵測用「NAS mtime > max(lastPushed, lastPulled) + 5s」單純比對，不做 conflict resolution。樓上樓下不會同時編輯就不會打架
+- **原子寫保護**：sync-write 先寫 `sync.json.tmp` → rename，避免另一台讀到半寫狀態
+- **NAS 路徑生效時機**：路徑設定改完要重啟 helper 才會 100% 生效（部分 endpoint 每次重新讀 cfg 但 console log 只啟動時印一次）
+
+### 已知問題
+
+- 路徑設定改完當下，後續同 endpoint 立刻生效（每 request 重讀 cfg），但 helper console 印的是啟動時的舊值 — 視覺干擾、不影響功能
+- 53 筆 Excel-only 諮詢病患（無資料夾）birthday 仍 null
+
 ## v0.1.6 — 2026-05-05
 
 Excel takeover 流程 + 下單追蹤完整化 + UI 細修。

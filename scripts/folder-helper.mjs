@@ -18,13 +18,61 @@ import { fileURLToPath } from 'node:url';
 const PORT = 8765;
 // 自動偵測安裝碟：優先 D 槽（vrlndy 主機慣例），否則用系統碟（C: 通常）
 const DRIVE = fs.existsSync('D:\\') ? 'D:' : (process.env.SystemDrive || 'C:');
-const ALLOWED_ROOTS = [`${DRIVE}\\矯正`, `${DRIVE}\\dev\\矯正追蹤-app`];
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const SCAN_SCRIPT = path.join(PROJECT_ROOT, 'scripts', 'scan-aligner-folders.mjs');
 const PATIENTS_JSON = path.join(PROJECT_ROOT, 'dev-data', 'patients-import.json');
 const ROLE_FILE = path.join(PROJECT_ROOT, 'dev-data', 'clinic-role.txt');
+const PATHS_FILE = path.join(PROJECT_ROOT, 'dev-data', 'clinic-paths.json');
+
+// ─── 路徑設定（NAS-ready）───────────────────────────────
+// clinic-paths.json schema:
+//   {
+//     "dataRoot": "Z:\\矯正追蹤",        // 病患資料夾 + 授權書 + Excel 都在這底下
+//     "syncFile": "Z:\\矯正追蹤\\sync.json"  // 跨機同步用的單一 JSON 檔
+//   }
+// 不存在 → fallback 到舊邏輯（{DRIVE}\矯正、無同步檔）
+function readPathsConfig() {
+  const fallback = {
+    dataRoot: `${DRIVE}\\矯正`,
+    syncFile: '', // 空字串 = 沒設定，跨機同步功能不可用
+  };
+  try {
+    const raw = fs.readFileSync(PATHS_FILE, 'utf8');
+    const cfg = JSON.parse(raw);
+    return {
+      dataRoot: typeof cfg.dataRoot === 'string' && cfg.dataRoot.trim() ? cfg.dataRoot.trim() : fallback.dataRoot,
+      syncFile: typeof cfg.syncFile === 'string' ? cfg.syncFile.trim() : '',
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function writePathsConfig(cfg) {
+  const out = {
+    dataRoot: typeof cfg.dataRoot === 'string' ? cfg.dataRoot.trim() : '',
+    syncFile: typeof cfg.syncFile === 'string' ? cfg.syncFile.trim() : '',
+  };
+  if (!out.dataRoot) throw new Error('dataRoot 必填');
+  fs.writeFileSync(PATHS_FILE, JSON.stringify(out, null, 2), 'utf8');
+  return out;
+}
+
+// 動態組 allowlist：dataRoot + syncFile 所在資料夾 + 開發專案資料夾
+function getAllowedRoots() {
+  const cfg = readPathsConfig();
+  const roots = [cfg.dataRoot, `${DRIVE}\\dev\\矯正追蹤-app`];
+  if (cfg.syncFile) {
+    roots.push(path.dirname(cfg.syncFile));
+  }
+  // 維持向後相容：D:\矯正 / C:\矯正（v0.1.6 以前版本可能寫死這個）
+  if (cfg.dataRoot !== `${DRIVE}\\矯正`) {
+    roots.push(`${DRIVE}\\矯正`);
+  }
+  return [...new Set(roots)];
+}
 
 // 讀本機角色：master = 持有真實 矯正/ 資料夾、可掃描；follower = 開發機，只能透過 backup 還原。
 // dev-data/clinic-role.txt 不存在或內容不是 "master" → 預設 follower（保守、防誤動）
@@ -38,9 +86,34 @@ function readRole() {
   }
 }
 
+// 把 D:\xxx remap 到當前 DRIVE\xxx（向後相容 v0.1.0 寫死路徑的資料）
+function remapPath(target) {
+  if (DRIVE !== 'D:' && /^D:\\/.test(target)) {
+    return DRIVE + target.slice(2);
+  }
+  return target;
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let buf = '';
+    req.on('data', (chunk) => {
+      buf += chunk.toString('utf8');
+      // 防爆：5MB 上限（sync 全 DB 通常 1-2MB）
+      if (buf.length > 5 * 1024 * 1024) {
+        reject(new Error('payload too large (>5MB)'));
+        req.destroy();
+      }
+    });
+    req.on('end', () => resolve(buf));
+    req.on('error', reject);
+  });
+}
+
 const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
     res.end();
@@ -57,17 +130,177 @@ const server = http.createServer((req, res) => {
 
   if (url.pathname === '/role') {
     const role = readRole();
-    const dataRoot = `${DRIVE}\\矯正`;
-    const scanFolder = `${DRIVE}\\矯正\\病患資料夾`;
+    const cfg = readPathsConfig();
+    const dataRoot = cfg.dataRoot;
+    const scanFolder = path.join(dataRoot, '病患資料夾');
     const scanFolderExists = fs.existsSync(scanFolder);
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ role, drive: DRIVE, dataRoot, scanFolder, scanFolderExists }));
+    res.end(JSON.stringify({
+      role,
+      drive: DRIVE,
+      dataRoot,
+      scanFolder,
+      scanFolderExists,
+      syncFile: cfg.syncFile,
+    }));
     return;
   }
 
-  // 掃 Excel 下單記錄 + 補充記錄、跑 python 兩支 import 出 JSON
+  // 讀路徑設定
+  if (url.pathname === '/paths' && req.method === 'GET') {
+    const cfg = readPathsConfig();
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({
+      ...cfg,
+      pathsFile: PATHS_FILE,
+      pathsFileExists: fs.existsSync(PATHS_FILE),
+    }));
+    return;
+  }
+
+  // 寫路徑設定（master only）
+  if (url.pathname === '/paths' && req.method === 'POST') {
+    if (readRole() !== 'master') {
+      res.statusCode = 403;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'follower 不能改路徑設定' }));
+      return;
+    }
+    (async () => {
+      try {
+        const body = await readJsonBody(req);
+        const parsed = JSON.parse(body);
+        const written = writePathsConfig(parsed);
+        console.log(`[folder-helper] paths updated: dataRoot=${written.dataRoot}, syncFile=${written.syncFile || '(none)'}`);
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true, paths: written, hint: '重啟 helper 後完整生效' }));
+      } catch (e) {
+        res.statusCode = 400;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    })();
+    return;
+  }
+
+  // ─── 跨機同步：sync-stat / sync-read / sync-write ──────
+  // 設計：syncFile 是個 JSON 檔（同 backup 格式），App 透過這 3 個 endpoint 讀寫
+  // mtime 比對由 App 端做（fetch /sync-stat 比 localStorage lastSyncedAt）
+
+  if (url.pathname === '/sync-stat') {
+    const cfg = readPathsConfig();
+    if (!cfg.syncFile) {
+      res.statusCode = 400;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: '尚未設定 syncFile（請去設定 → 路徑設定）', configured: false }));
+      return;
+    }
+    if (!fs.existsSync(cfg.syncFile)) {
+      res.statusCode = 404;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'syncFile 不存在', syncFile: cfg.syncFile, configured: true, exists: false }));
+      return;
+    }
+    try {
+      const stat = fs.statSync(cfg.syncFile);
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({
+        configured: true,
+        exists: true,
+        syncFile: cfg.syncFile,
+        mtime: stat.mtime.toISOString(),
+        size: stat.size,
+      }));
+    } catch (e) {
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
+  if (url.pathname === '/sync-read') {
+    const cfg = readPathsConfig();
+    if (!cfg.syncFile) {
+      res.statusCode = 400;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: '尚未設定 syncFile' }));
+      return;
+    }
+    if (!fs.existsSync(cfg.syncFile)) {
+      res.statusCode = 404;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'syncFile 不存在', syncFile: cfg.syncFile }));
+      return;
+    }
+    try {
+      const content = fs.readFileSync(cfg.syncFile, 'utf8');
+      const stat = fs.statSync(cfg.syncFile);
+      res.setHeader('Content-Type', 'application/json');
+      // 直接回 raw content（前端再 JSON.parse）+ metadata header
+      res.setHeader('X-Sync-Mtime', stat.mtime.toISOString());
+      res.setHeader('X-Sync-Size', String(stat.size));
+      res.end(content);
+    } catch (e) {
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
+  if (url.pathname === '/sync-write' && req.method === 'POST') {
+    // sync-write 兩台機都要能寫（不限 master only）— 因為兩台都會編輯
+    const cfg = readPathsConfig();
+    if (!cfg.syncFile) {
+      res.statusCode = 400;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: '尚未設定 syncFile' }));
+      return;
+    }
+    (async () => {
+      try {
+        const body = await readJsonBody(req);
+        // 驗證是合法 JSON（不解析內容、只確認結構）
+        try {
+          JSON.parse(body);
+        } catch {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'body 不是合法 JSON' }));
+          return;
+        }
+        // 確保目錄存在
+        const dir = path.dirname(cfg.syncFile);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        // 原子寫：先寫 .tmp、再 rename（避免半寫的 sync.json 被另一台讀到）
+        const tmpFile = cfg.syncFile + '.tmp';
+        fs.writeFileSync(tmpFile, body, 'utf8');
+        fs.renameSync(tmpFile, cfg.syncFile);
+        const stat = fs.statSync(cfg.syncFile);
+        console.log(`[folder-helper] sync-write: ${cfg.syncFile} (${stat.size} bytes)`);
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({
+          ok: true,
+          syncFile: cfg.syncFile,
+          mtime: stat.mtime.toISOString(),
+          size: stat.size,
+        }));
+      } catch (e) {
+        res.statusCode = 500;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    })();
+    return;
+  }
+
+  // 掃 Excel 下單記錄、跑 python takeover script 出 JSON
   if (url.pathname === '/scan-excel') {
-    const excelFolder = `${DRIVE}\\矯正\\下單Excel`;
+    const cfg = readPathsConfig();
+    const excelFolder = path.join(cfg.dataRoot, '下單Excel');
     if (!fs.existsSync(excelFolder)) {
       res.statusCode = 404;
       res.setHeader('Content-Type', 'application/json');
@@ -110,8 +343,12 @@ const server = http.createServer((req, res) => {
   if (url.pathname === '/rescan-folders') {
     // 注：scan 不再限制 master only — 開發機跟筆電都可掃自己的資料夾
     // 跑 scan script (用當前 node)，產生最新 patients-import.json，回傳給前端
+    // 把 dataRoot 透過 env 傳給 scan script
+    const cfg = readPathsConfig();
+    const env = { ...process.env, ALIGNER_DATA_ROOT: cfg.dataRoot };
     const child = spawn(process.execPath, [SCAN_SCRIPT], {
       cwd: PROJECT_ROOT,
+      env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let stderr = '';
@@ -233,11 +470,11 @@ const server = http.createServer((req, res) => {
       res.end('missing folder');
       return;
     }
-    let remapped = target;
-    if (DRIVE !== 'D:' && /^D:\\/.test(target)) remapped = DRIVE + target.slice(2);
-    if (!ALLOWED_ROOTS.some((root) => remapped.startsWith(root))) {
+    const remapped = remapPath(target);
+    const allowed = getAllowedRoots();
+    if (!allowed.some((root) => remapped.startsWith(root))) {
       res.statusCode = 403;
-      res.end('not in allowlist');
+      res.end(`not in allowlist (allowed roots: ${allowed.join(', ')})`);
       return;
     }
     if (!fs.existsSync(remapped)) {
@@ -270,11 +507,11 @@ const server = http.createServer((req, res) => {
       res.end('missing path');
       return;
     }
-    let remapped = target;
-    if (DRIVE !== 'D:' && /^D:\\/.test(target)) remapped = DRIVE + target.slice(2);
-    if (!ALLOWED_ROOTS.some((root) => remapped.startsWith(root))) {
+    const remapped = remapPath(target);
+    const allowed = getAllowedRoots();
+    if (!allowed.some((root) => remapped.startsWith(root))) {
       res.statusCode = 403;
-      res.end(`path not in allowlist (must start with one of: ${ALLOWED_ROOTS.join(', ')})`);
+      res.end(`path not in allowlist (allowed: ${allowed.join(', ')})`);
       return;
     }
     if (fs.existsSync(remapped)) {
@@ -305,10 +542,9 @@ const server = http.createServer((req, res) => {
       res.end('missing folder or pattern');
       return;
     }
-    // 路徑 remap：D:\ → 當前 DRIVE（同 open-folder 邏輯）
-    let remapped = folder;
-    if (DRIVE !== 'D:' && /^D:\\/.test(folder)) remapped = DRIVE + folder.slice(2);
-    if (!ALLOWED_ROOTS.some((root) => remapped.startsWith(root))) {
+    const remapped = remapPath(folder);
+    const allowed = getAllowedRoots();
+    if (!allowed.some((root) => remapped.startsWith(root))) {
       res.statusCode = 403;
       res.end(`folder not in allowlist`);
       return;
@@ -357,14 +593,14 @@ const server = http.createServer((req, res) => {
     }
     // 跨機部署 path remap：v0.1.0 之前的資料寫死 D:\，本機若沒 D 槽（部署在 C 槽機器）
     // 自動把開頭碟符 D: 改寫為當前 DRIVE，避免要回去修 IndexedDB 內 800+ 寫死路徑
-    let remapped = target;
-    if (DRIVE !== 'D:' && /^D:\\/.test(target)) {
-      remapped = DRIVE + target.slice(2);
+    const remapped = remapPath(target);
+    if (remapped !== target) {
       console.log(`[folder-helper] path remap: ${target} → ${remapped}`);
     }
-    if (!ALLOWED_ROOTS.some((root) => remapped.startsWith(root))) {
+    const allowed = getAllowedRoots();
+    if (!allowed.some((root) => remapped.startsWith(root))) {
       res.statusCode = 403;
-      res.end(`path not in allowlist (must start with one of: ${ALLOWED_ROOTS.join(', ')})`);
+      res.end(`path not in allowlist (allowed: ${allowed.join(', ')})`);
       return;
     }
     if (!fs.existsSync(remapped)) {
@@ -397,7 +633,11 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, '127.0.0.1', () => {
+  const cfg = readPathsConfig();
+  const allowed = getAllowedRoots();
   console.log(`[folder-helper] listening on http://127.0.0.1:${PORT}`);
   console.log(`[folder-helper] role: ${readRole()} (drive: ${DRIVE})`);
-  console.log(`[folder-helper] allowlist: ${ALLOWED_ROOTS.join(', ')}`);
+  console.log(`[folder-helper] dataRoot: ${cfg.dataRoot}`);
+  console.log(`[folder-helper] syncFile: ${cfg.syncFile || '(not configured)'}`);
+  console.log(`[folder-helper] allowlist: ${allowed.join(', ')}`);
 });

@@ -32,10 +32,11 @@ import {
 } from '../config/alerts';
 import { seedIfEmpty, type SeedResult } from '../seed';
 import {
-  checkUpdate,
   runUpdate,
   scanExcel,
   listFolderNames,
+  listTags,
+  writeBackup,
   getPaths,
   savePaths,
   syncStat,
@@ -142,13 +143,20 @@ function UiScaleSection() {
   );
 }
 
-/* ─── App 更新 ─────────────────────────────────────── */
+/* ─── App 更新 / 切換版本 ─────────────────────────────── */
+const LATEST_OPTION = '__latest__'; // dropdown 內代表「最新 main」的特殊值
+
 function UpdateSection() {
   const [roleInfo, setRoleInfo] = useState<{ role: 'master' | 'follower' } | null>(null);
-  const [checkState, setCheckState] = useState<'idle' | 'checking' | 'updating' | 'done'>('idle');
-  const [check, setCheck] = useState<{ behind: number; current: string; latest: string } | null>(null);
+  const [tags, setTags] = useState<string[]>([]);
+  const [currentHash, setCurrentHash] = useState('');
+  const [currentTag, setCurrentTag] = useState<string | null>(null);
+  const [latestMain, setLatestMain] = useState('');
+  const [selectedRef, setSelectedRef] = useState<string>(LATEST_OPTION);
+  const [phase, setPhase] = useState<'idle' | 'loading' | 'backing-up' | 'updating' | 'done'>('idle');
   const [error, setError] = useState('');
   const [runOutput, setRunOutput] = useState('');
+  const [backupPath, setBackupPath] = useState('');
 
   useEffect(() => {
     fetch('http://127.0.0.1:8765/role')
@@ -157,98 +165,237 @@ function UpdateSection() {
       .catch(() => {});
   }, []);
 
-  async function doCheck() {
-    setCheckState('checking');
+  // role 確認後才能 listTags（master only）
+  useEffect(() => {
+    if (roleInfo?.role !== 'master') return;
+    refreshTags();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roleInfo]);
+
+  async function refreshTags() {
+    setPhase('loading');
     setError('');
-    setCheck(null);
-    const r = await checkUpdate();
+    const r = await listTags();
     if (r.state === 'ok') {
-      setCheck({ behind: r.behind, current: r.current, latest: r.latest });
-      setCheckState('idle');
+      setTags(r.tags);
+      setCurrentHash(r.currentHash);
+      setCurrentTag(r.currentTag);
+      setLatestMain(r.latestMain);
+      // 預設 dropdown：如果當前不在 latest main，預選 latest；否則保持當前 tag
+      if (r.currentHash !== r.latestMain) {
+        setSelectedRef(LATEST_OPTION);
+      } else {
+        setSelectedRef(r.currentTag ?? LATEST_OPTION);
+      }
+      setPhase('idle');
+    } else if (r.state === 'helper-down') {
+      setError('helper 沒回應');
+      setPhase('idle');
     } else {
-      setError(r.state === 'helper-down' ? '本機 helper 沒回應' : `檢查失敗：${r.message}`);
-      setCheckState('idle');
+      setError(`列 tag 失敗：${r.message}`);
+      setPhase('idle');
     }
   }
 
-  async function doUpdate() {
-    if (!confirm('立即更新？\n\n會跑 git pull → npm install (如需) → npm run build，1-3 分鐘。\n完成後請按 Ctrl+Shift+R 重整 App。')) return;
-    setCheckState('updating');
+  // 判斷當前選擇相對於當前 HEAD 是「升 / 切 / 退」
+  function describeAction(): { label: string; disabled: boolean; rollback: boolean } {
+    if (selectedRef === LATEST_OPTION) {
+      // 升到 latest main
+      if (currentHash && currentHash === latestMain) {
+        return { label: '✓ 已是最新 main', disabled: true, rollback: false };
+      }
+      return { label: '⬆ 升到最新 main', disabled: false, rollback: false };
+    }
+    // 選了 tag
+    if (currentTag === selectedRef) {
+      return { label: `✓ 已是 ${selectedRef}`, disabled: true, rollback: false };
+    }
+    // 比較 selectedRef 跟 currentTag 哪個比較舊（用 tag list 順序：tags[0] 最新）
+    const selIdx = tags.indexOf(selectedRef);
+    const curIdx = currentTag ? tags.indexOf(currentTag) : -1;
+    // selIdx 比 curIdx 大（更後面 = 更舊版本）= 退版
+    const rollback = curIdx >= 0 && selIdx > curIdx;
+    return {
+      label: rollback ? `⬇ 退回 ${selectedRef}` : `⬆ 切到 ${selectedRef}`,
+      disabled: false,
+      rollback,
+    };
+  }
+
+  async function doSwitch() {
+    const action = describeAction();
+    if (action.disabled) return;
+    const refToUse = selectedRef === LATEST_OPTION ? '' : selectedRef; // 空字串 = 沒帶 ref → 升 latest
+    const targetLabel = selectedRef === LATEST_OPTION ? '最新 main' : selectedRef;
+    if (
+      !confirm(
+        `將切換到 ${targetLabel}（${action.rollback ? '退版' : '升版/切換'}）。\n\n` +
+        `流程：\n` +
+        `  1. 自動匯出 backup 到 dataRoot\\app-backups\\\n` +
+        `  2. git fetch + git reset --hard ${targetLabel}\n` +
+        `  3. npm install (依賴變動才跑)\n` +
+        `  4. npm run build\n\n` +
+        `預估 1-3 分鐘。完成後按 Ctrl+Shift+R 重整 App。\n\n` +
+        (action.rollback
+          ? `⚠️ 跨版本 IndexedDB schema 不一定相容。如果開不起來，去設定 → 資料備份 → 匯入剛才的 backup。\n\n`
+          : '') +
+        `確定？`,
+      )
+    )
+      return;
+
     setError('');
     setRunOutput('');
-    const r = await runUpdate();
+    setBackupPath('');
+
+    // 1. 匯出 backup 並寫到 dataRoot/app-backups/
+    setPhase('backing-up');
+    let savedBackupPath = '';
+    try {
+      const backup = await exportBackup();
+      const json = JSON.stringify(backup, null, 2);
+      const fromVer = currentTag || (currentHash ? currentHash.slice(0, 7) : 'unknown');
+      const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const filename = `pre-switch-${fromVer}-to-${targetLabel.replace(/\W+/g, '_')}-${dateStr}.json`;
+      const wb = await writeBackup(filename, json);
+      if (wb.state !== 'ok') {
+        setError(
+          `自動 backup 失敗：${wb.state === 'helper-down' ? 'helper 沒回應' : wb.message}。\n建議手動到「資料備份」匯出後再切版。`,
+        );
+        setPhase('idle');
+        return;
+      }
+      savedBackupPath = wb.path;
+      setBackupPath(wb.path);
+    } catch (e) {
+      setError(`匯出 backup 失敗：${e instanceof Error ? e.message : String(e)}`);
+      setPhase('idle');
+      return;
+    }
+
+    // 2. 跑 update.ps1 with -Ref
+    setPhase('updating');
+    const r = await runUpdate(refToUse || undefined);
     if (r.state === 'ok') {
       setRunOutput(r.stdout + (r.stderr ? '\n\n[stderr]\n' + r.stderr : ''));
       if (r.exitCode === 0) {
-        setCheckState('done');
-        setCheck(null); // 重新檢查
+        setPhase('done');
+        // 重新查 tag 狀態
+        refreshTags();
       } else {
-        setError(`更新失敗 (exit ${r.exitCode})`);
-        setCheckState('idle');
+        setError(`更新失敗 (exit ${r.exitCode})。Backup 已存：${savedBackupPath}`);
+        setPhase('idle');
       }
     } else {
       setError(r.state === 'helper-down' ? '本機 helper 沒回應' : `更新失敗：${r.message}`);
-      setCheckState('idle');
+      setPhase('idle');
     }
   }
 
   const isMaster = roleInfo?.role === 'master';
+  const action = describeAction();
+  const busy = phase === 'backing-up' || phase === 'updating' || phase === 'loading';
 
   return (
     <section className="rounded-xl border border-zinc-800 bg-zinc-900/30">
       <header className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-medium text-zinc-200">App 更新</h2>
-          <span className="text-xs text-zinc-500">當前 v{__APP_VERSION__}</span>
+          <h2 className="text-sm font-medium text-zinc-200">App 更新 / 切換版本</h2>
+          <span className="text-xs text-zinc-500">
+            當前 v{__APP_VERSION__}
+            {currentTag && currentTag !== `v${__APP_VERSION__}` && (
+              <span className="text-amber-400 ml-1">· tag: {currentTag}</span>
+            )}
+          </span>
         </div>
         {isMaster && (
-          <div className="flex gap-2">
-            <button
-              onClick={doCheck}
-              disabled={checkState !== 'idle'}
-              className="px-3 py-1.5 rounded-md text-xs border border-zinc-700 text-zinc-200 hover:bg-zinc-800 transition disabled:opacity-50"
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedRef}
+              onChange={(e) => setSelectedRef(e.target.value)}
+              disabled={busy || tags.length === 0}
+              className="h-8 px-2 rounded-md bg-zinc-900/60 border border-zinc-800 text-xs text-zinc-200 font-mono focus:outline-none focus:border-sky-500/50 disabled:opacity-50"
             >
-              {checkState === 'checking' ? '🔍 檢查中…' : '🔍 檢查更新'}
+              <option value={LATEST_OPTION}>
+                最新 main {latestMain && `(${latestMain})`}
+              </option>
+              {tags.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                  {t === currentTag && ' (當前)'}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={refreshTags}
+              disabled={busy}
+              className="px-2 py-1.5 rounded-md text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition disabled:opacity-50"
+              title="重新拉 tag 列表（git fetch --tags）"
+            >
+              ⟳
             </button>
-            {check && check.behind > 0 && (
-              <button
-                onClick={doUpdate}
-                disabled={checkState === 'updating'}
-                className="px-3 py-1.5 rounded-md text-xs bg-sky-500/15 border border-sky-500/40 text-sky-300 hover:bg-sky-500/25 transition disabled:opacity-50"
-              >
-                {checkState === 'updating' ? '⏳ 更新中…' : `⬆ 立即更新 (${check.behind} 個 commit)`}
-              </button>
-            )}
+            <button
+              onClick={doSwitch}
+              disabled={busy || action.disabled}
+              className={`px-3 py-1.5 rounded-md text-xs border transition disabled:opacity-50 ${
+                action.rollback
+                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 hover:bg-amber-500/25'
+                  : 'bg-sky-500/15 border-sky-500/40 text-sky-300 hover:bg-sky-500/25'
+              }`}
+            >
+              {phase === 'backing-up'
+                ? '⏳ 匯出備份…'
+                : phase === 'updating'
+                ? '⏳ 切換中…'
+                : action.label}
+            </button>
           </div>
         )}
       </header>
       <div className="p-5 space-y-2 text-sm">
         {!isMaster && roleInfo && (
           <p className="text-xs text-zinc-500">
-            此機為 <strong className="text-zinc-300">{roleInfo.role}</strong>，不能從 GitHub 拉更新。程式碼從這台 push、回 master（筆電）跑更新。
+            此機為 <strong className="text-zinc-300">{roleInfo.role}</strong>，不能切換版本。程式碼從這台 push、回 master（筆電）切版。
           </p>
         )}
         {!roleInfo && <p className="text-xs text-zinc-500">讀取本機角色中…</p>}
-        {check && check.behind === 0 && (
-          <p className="text-xs text-emerald-400">✓ 已是最新版本（{check.current}）</p>
-        )}
-        {check && check.behind > 0 && (
-          <p className="text-xs text-amber-300">
-            落後 {check.behind} 個 commit · {check.current} → {check.latest}
+        {isMaster && phase === 'loading' && <p className="text-xs text-zinc-500">拉 tag 列表中…</p>}
+        {isMaster && tags.length > 0 && (
+          <p className="text-[11px] text-zinc-500">
+            可選 tag {tags.length} 個 · HEAD <code className="text-zinc-400">{currentHash}</code>
+            {currentTag && (
+              <>
+                {' '}· 當前 tag <code className="text-zinc-400">{currentTag}</code>
+              </>
+            )}
+            {' · '}origin/main <code className="text-zinc-400">{latestMain}</code>
           </p>
         )}
-        {checkState === 'updating' && (
+        {phase === 'backing-up' && (
+          <p className="text-xs text-sky-300">⏳ 切版前自動匯出 backup 到 dataRoot\app-backups\…</p>
+        )}
+        {phase === 'updating' && (
           <p className="text-xs text-sky-300">
-            ⏳ 跑 git pull → npm install (如需) → npm run build... 1-3 分鐘，請勿關閉視窗。
+            ⏳ git fetch → reset → npm install (如需) → npm run build... 1-3 分鐘，請勿關閉視窗。
           </p>
         )}
-        {checkState === 'done' && (
+        {phase === 'done' && (
           <div className="px-3 py-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs">
-            ✓ 更新完成。<strong>請按 Ctrl+Shift+R 重整 App 載入新版本。</strong>
+            ✓ 切版完成。<strong>請按 Ctrl+Shift+R 重整 App 載入新版本。</strong>
+            {backupPath && (
+              <div className="text-emerald-400/80 mt-1">
+                pre-switch backup: <code>{backupPath}</code>
+              </div>
+            )}
+          </div>
+        )}
+        {backupPath && phase !== 'done' && (
+          <div className="px-3 py-2 rounded-md bg-zinc-800/40 border border-zinc-700/40 text-zinc-300 text-xs">
+            📦 backup 已存：<code className="text-zinc-400">{backupPath}</code>
           </div>
         )}
         {error && (
-          <div className="px-3 py-2 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+          <div className="px-3 py-2 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs whitespace-pre-wrap">
             ⚠️ {error}
           </div>
         )}
@@ -258,6 +405,10 @@ function UpdateSection() {
             <pre className="mt-2 p-3 bg-zinc-950/60 rounded text-[10px] text-zinc-400 overflow-x-auto whitespace-pre-wrap">{runOutput}</pre>
           </details>
         )}
+        <p className="text-[11px] text-zinc-500 pt-2 border-t border-zinc-800">
+          <strong>切版前自動 backup</strong> → 寫到 <code>{`{dataRoot}\\app-backups\\pre-switch-{from}-to-{target}-{時間}.json`}</code>。
+          切版後 IndexedDB 開不起來時，去「資料備份 / 還原」匯入剛才的 backup 即可。
+        </p>
       </div>
     </section>
   );

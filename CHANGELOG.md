@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.1.8 — 2026-05-07
+
+選版本更新 + 切版前自動備份。
+
+### 新增
+
+- **設定 → App 更新 改成 dropdown 選版本**：列所有 git tag（v 開頭、按 semver desc）+「最新 main」一個選項
+  - 顯示當前 HEAD short hash + 當前 tag（detached or tagged）+ origin/main short hash
+  - 按鈕文字會根據選擇變化：`⬆ 升到最新 main` / `⬆ 切到 v0.1.X` / `⬇ 退回 v0.1.X` / `✓ 已是此版本`（disabled）
+  - 退版按鈕 amber 色、升版 / 切換 sky 色、視覺區分
+  - 跨版本 IndexedDB schema 風險用 confirm dialog 提示
+- **切版前自動匯出 backup**：寫到 `${dataRoot}\app-backups\pre-switch-{from}-to-{target}-{timestamp}.json`
+  - 切版失敗也保留備份檔位置 → 用戶可手動「資料備份 / 還原」匯入回來
+- **helper 加 2 個 endpoints**：
+  - `GET /list-tags`：回 `{ tags, currentHash, currentTag, latestMain }`、master only、自動 `git fetch --tags origin`
+  - `POST /write-backup?name=*.json`：寫到 `${dataRoot}/app-backups/`、master only、檔名嚴格驗（只允英數._-）
+- **`runUpdate(ref?)` 接 optional ref**：helper `/run-update?ref=v0.1.5` → update.ps1 `-Ref v0.1.5`
+- **update.ps1 加 `-Ref` flag**：
+  - 沒帶 → 跑 `git pull origin main`（升 latest，舊行為不變）
+  - 帶了 → 跑 `git fetch --tags origin && git reset --hard <ref>`（切到指定版本）
+  - 標題會改顯示「切換版本」/「升到最新」、加目標版本標示
+  - 嚴格 ref 格式驗證（只允許英數._/-）防 shell injection
+
+### 設計筆記
+
+- **「切版 = 必須 npm install + build」**：跨版本可能 package-lock 變動 → update.ps1 用 `git diff <before> <after> --name-only` 偵測 package.json 變化才跑 install，build 一定跑（dist/ 必更新）
+- **detached HEAD 不擔心**：`git reset --hard <tag>` 不進 detached、main branch 直接指到該 tag。下次 `git fetch` 會看到 behind/ahead 計數
+- **跨版本 schema 風險**：v0.1.4 之後（含 track + refinementLevel）跨版相容；跨 v0.1.4 可能炸 Dexie。用 confirm dialog + 自動 backup 雙保險
+- **master only**：follower 三個 endpoint（list-tags / write-backup / run-update）都擋下、UI 也不顯示按鈕
+
 ## v0.1.7 — 2026-05-05
 
 NAS-ready 跨機同步基礎建設。樓上樓下兩台 Windows 機共用 NAS 上的 sync.json。

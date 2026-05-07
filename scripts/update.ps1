@@ -1,21 +1,29 @@
-﻿﻿# 隱形矯正追蹤 — 一鍵更新
-# 動作：git pull → (依賴變動才) npm install → npm run build → 提示重啟 App
+﻿# 隱形矯正追蹤 — 一鍵更新 / 切換版本
+# 動作：
+#   - 沒帶 -Ref：git pull origin main → 升到最新
+#   - 帶 -Ref <tag/branch>：git fetch --tags + git reset --hard <ref> → 切換到指定版本
+#   依賴變動才 npm install → npm run build → 提示重啟 App
 #
 # 在 D 機 (D:\dev\...) 跟筆電 (C:\dev\...) 都能跑，自動偵測。
 # 由 更新.bat 呼叫、PowerShell 直接跑、或 helper service /run-update 呼叫（用 -Silent）。
 
 param(
-    [switch]$Silent  # 跳過所有 Read-Host（給 helper / 自動化用）
+    [switch]$Silent,  # 跳過所有 Read-Host（給 helper / 自動化用）
+    [string]$Ref = ''  # 指定 tag / branch，例 "v0.1.5" / "main"。空 = 升 latest origin/main
 )
 
 $ErrorActionPreference = 'Stop'
 $OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
+$mode = if ($Ref) { '切換版本' } else { '升到最新' }
 Write-Host ''
 Write-Host '╔══════════════════════════════════╗' -ForegroundColor Cyan
-Write-Host '║  隱形矯正追蹤 — 一鍵更新         ║' -ForegroundColor Cyan
+Write-Host "║  隱形矯正追蹤 — $mode      ║" -ForegroundColor Cyan
 Write-Host '╚══════════════════════════════════╝' -ForegroundColor Cyan
+if ($Ref) {
+    Write-Host "目標版本：$Ref" -ForegroundColor Yellow
+}
 Write-Host ''
 
 # ── 偵測 App 目錄 ──────────────────────────────────────
@@ -87,19 +95,52 @@ if ($dirty) {
 Write-Host '  ✓ 工作樹乾淨' -ForegroundColor Green
 Write-Host ''
 
-# ── 1. git pull ───────────────────────────────────────
-Write-Host '[1/3] 拉最新版本（git pull）...'
+# ── 1. git fetch + 切版本 ─────────────────────────────
 $beforeHash = (git rev-parse HEAD).Trim()
-git pull origin main
-if ($LASTEXITCODE -ne 0) {
-    Write-Host '❌ git pull 失敗' -ForegroundColor Red
-    if (-not $Silent) { Read-Host '按 Enter 結束' }
-    exit 1
+
+if ($Ref) {
+    Write-Host "[1/3] 拉所有 tag 並切換到 $Ref..."
+    git fetch --tags origin
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host '❌ git fetch 失敗' -ForegroundColor Red
+        if (-not $Silent) { Read-Host '按 Enter 結束' }
+        exit 1
+    }
+    # 解析 ref 到實際 commit hash（驗證 ref 存在）
+    $refExists = $true
+    $resolved = git rev-parse --verify "$Ref" 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $resolved) {
+        # 試 tag 形式
+        $resolved = git rev-parse --verify "tags/$Ref" 2>$null
+        if ($LASTEXITCODE -ne 0 -or -not $resolved) {
+            $refExists = $false
+        }
+    }
+    if (-not $refExists) {
+        Write-Host "❌ 找不到 ref '$Ref'（不是有效的 tag / branch / commit）" -ForegroundColor Red
+        if (-not $Silent) { Read-Host '按 Enter 結束' }
+        exit 1
+    }
+    git reset --hard "$Ref"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "❌ git reset --hard $Ref 失敗" -ForegroundColor Red
+        if (-not $Silent) { Read-Host '按 Enter 結束' }
+        exit 1
+    }
+} else {
+    Write-Host '[1/3] 拉最新版本（git pull）...'
+    git pull origin main
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host '❌ git pull 失敗' -ForegroundColor Red
+        if (-not $Silent) { Read-Host '按 Enter 結束' }
+        exit 1
+    }
 }
+
 $afterHash = (git rev-parse HEAD).Trim()
 if ($beforeHash -eq $afterHash) {
     Write-Host ''
-    Write-Host '✓ 已是最新版本，無需更新。' -ForegroundColor Green
+    Write-Host '✓ 已在目標版本，無需動作。' -ForegroundColor Green
     Write-Host ''
     if (-not $Silent) { Read-Host '按 Enter 關閉' }
     exit 0
@@ -108,6 +149,7 @@ Write-Host "  ✓ $($beforeHash.Substring(0,7)) → $($afterHash.Substring(0,7))
 Write-Host ''
 
 # ── 2. 依賴變動才 npm install ─────────────────────────
+# 切版本可能會差更多（兩 hash 之間 N 個 commit 的累積差異）→ 用 diff --name-only 比兩端
 $changedFiles = git diff "$beforeHash" "$afterHash" --name-only
 $pkgChanged = $changedFiles | Select-String -Pattern '^package(-lock)?\.json$' -Quiet
 if ($pkgChanged) {
@@ -137,9 +179,11 @@ Write-Host ''
 
 # ── 摘要 ─────────────────────────────────────────────
 Write-Host '╔══════════════════════════════════╗' -ForegroundColor Green
-Write-Host '║  ✓ 更新完成                      ║' -ForegroundColor Green
+Write-Host '║  ✓ 完成                          ║' -ForegroundColor Green
 Write-Host '╚══════════════════════════════════╝' -ForegroundColor Green
 Write-Host ''
+$opLabel = if ($Ref) { "切到 $Ref" } else { '升 latest' }
+Write-Host "操作：$opLabel" -ForegroundColor Cyan
 Write-Host "版本：$($beforeHash.Substring(0,7)) → $($afterHash.Substring(0,7))" -ForegroundColor Cyan
 
 # 顯示這次更新涉及的檔案（最多 15 個）
@@ -157,6 +201,6 @@ Write-Host ''
 Write-Host '下一步：' -ForegroundColor Cyan
 Write-Host '  1. 如果 App 正在跑 → 關掉那個黑色 PS 視窗（server 會停）'
 Write-Host '  2. 雙擊桌面【隱形矯正追蹤】捷徑重新啟動'
-Write-Host '  3. 如果用 PWA → 在 App 視窗按 Ctrl+R 重整'
+Write-Host '  3. 如果用 PWA → 在 App 視窗按 Ctrl+Shift+R 重整'
 Write-Host ''
 if (-not $Silent) { Read-Host '按 Enter 關閉' }

@@ -425,7 +425,114 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // 列所有 git tag + 當前 HEAD + origin/main hash（給 App dropdown 用）
+  if (url.pathname === '/list-tags') {
+    if (readRole() !== 'master') {
+      res.statusCode = 403;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'follower 不能查 tag（沒 git fetch 過）' }));
+      return;
+    }
+    // 先 fetch tag 確保最新
+    const fetchProc = spawn('git', ['fetch', '--tags', 'origin'], { cwd: PROJECT_ROOT });
+    fetchProc.on('close', (fetchCode) => {
+      if (fetchCode !== 0) {
+        res.statusCode = 500;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'git fetch --tags 失敗（沒網路 or git 沒裝?)' }));
+        return;
+      }
+      // 列 tag（v 開頭、按 semver desc）
+      const tagProc = spawn('git', ['tag', '--list', 'v*', '--sort=-version:refname'], { cwd: PROJECT_ROOT });
+      let tagOut = '';
+      tagProc.stdout.on('data', (d) => (tagOut += d.toString()));
+      tagProc.on('close', () => {
+        const tags = tagOut
+          .split('\n')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        // 抓 HEAD short hash
+        const headProc = spawn('git', ['rev-parse', '--short', 'HEAD'], { cwd: PROJECT_ROOT });
+        let headHash = '';
+        headProc.stdout.on('data', (d) => (headHash += d.toString()));
+        headProc.on('close', () => {
+          // 抓 origin/main short hash
+          const remoteProc = spawn('git', ['rev-parse', '--short', 'origin/main'], { cwd: PROJECT_ROOT });
+          let remoteHash = '';
+          remoteProc.stdout.on('data', (d) => (remoteHash += d.toString()));
+          remoteProc.on('close', () => {
+            // 看當前 HEAD 是哪個 tag（如果有對應）
+            const tagAtHeadProc = spawn('git', ['tag', '--points-at', 'HEAD'], { cwd: PROJECT_ROOT });
+            let tagAtHeadOut = '';
+            tagAtHeadProc.stdout.on('data', (d) => (tagAtHeadOut += d.toString()));
+            tagAtHeadProc.on('close', () => {
+              const currentTag = tagAtHeadOut.split('\n').map((s) => s.trim()).find(Boolean) || null;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(
+                JSON.stringify({
+                  tags,
+                  currentHash: headHash.trim(),
+                  currentTag,
+                  latestMain: remoteHash.trim(),
+                }),
+              );
+            });
+          });
+        });
+      });
+    });
+    return;
+  }
+
+  // 寫 backup 到 dataRoot/app-backups/（給「切版本前自動 export backup」用）
+  if (url.pathname === '/write-backup' && req.method === 'POST') {
+    if (readRole() !== 'master') {
+      res.statusCode = 403;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'follower 不能寫 backup' }));
+      return;
+    }
+    const name = url.searchParams.get('name');
+    if (!name || !/^[A-Za-z0-9._-]+\.json$/.test(name)) {
+      res.statusCode = 400;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'name 必填且只能英數._-、結尾 .json' }));
+      return;
+    }
+    const cfg = readPathsConfig();
+    const backupDir = path.join(cfg.dataRoot, 'app-backups');
+    const target = path.join(backupDir, name);
+    (async () => {
+      try {
+        const body = await readJsonBody(req);
+        // 驗證 JSON
+        try {
+          JSON.parse(body);
+        } catch {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'body 不是合法 JSON' }));
+          return;
+        }
+        if (!fs.existsSync(backupDir)) {
+          fs.mkdirSync(backupDir, { recursive: true });
+        }
+        fs.writeFileSync(target, body, 'utf8');
+        const stat = fs.statSync(target);
+        console.log(`[folder-helper] write-backup: ${target} (${stat.size} bytes)`);
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true, path: target, size: stat.size }));
+      } catch (e) {
+        res.statusCode = 500;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    })();
+    return;
+  }
+
   // 跑 update.ps1 -Silent，等完成回傳結果
+  // 可選 query: ?ref=<tag>，傳給 update.ps1 -Ref；沒帶 = 升 latest
   if (url.pathname === '/run-update') {
     if (readRole() !== 'master') {
       res.statusCode = 403;
@@ -433,12 +540,20 @@ const server = http.createServer((req, res) => {
       res.end(JSON.stringify({ error: 'follower 不能跑更新' }));
       return;
     }
+    const ref = url.searchParams.get('ref') || '';
+    // 嚴格驗 ref 格式：只允許 [A-Za-z0-9._/-]，避免 shell injection
+    if (ref && !/^[A-Za-z0-9._/-]+$/.test(ref)) {
+      res.statusCode = 400;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'ref 格式不合（只允許英數._/-）' }));
+      return;
+    }
     const updateScript = path.join(PROJECT_ROOT, 'scripts', 'update.ps1');
-    const ps = spawn(
-      'powershell',
-      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', updateScript, '-Silent'],
-      { cwd: PROJECT_ROOT },
-    );
+    const psArgs = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', updateScript, '-Silent'];
+    if (ref) {
+      psArgs.push('-Ref', ref);
+    }
+    const ps = spawn('powershell', psArgs, { cwd: PROJECT_ROOT });
     let stdout = '';
     let stderr = '';
     ps.stdout.on('data', (d) => (stdout += d.toString()));

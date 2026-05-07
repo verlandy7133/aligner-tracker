@@ -121,14 +121,18 @@ export async function scanExcel(): Promise<ScanExcelResult> {
 }
 
 // 跑 update.ps1 -Silent，等 1-3 分鐘
+// ref 可選：帶 = 切到指定 tag/branch；不帶 = 升 latest origin/main
 export type RunUpdateResult =
   | { state: 'ok'; exitCode: number; stdout: string; stderr: string }
   | { state: 'error'; message: string }
   | { state: 'helper-down' };
 
-export async function runUpdate(): Promise<RunUpdateResult> {
+export async function runUpdate(ref?: string): Promise<RunUpdateResult> {
   try {
-    const resp = await fetch(`${HELPER_BASE}/run-update`);
+    const url = ref
+      ? `${HELPER_BASE}/run-update?ref=${encodeURIComponent(ref)}`
+      : `${HELPER_BASE}/run-update`;
+    const resp = await fetch(url);
     if (resp.ok) {
       const data = (await resp.json()) as {
         success: boolean;
@@ -137,6 +141,64 @@ export async function runUpdate(): Promise<RunUpdateResult> {
         stderr: string;
       };
       return { state: 'ok', exitCode: data.exitCode, stdout: data.stdout, stderr: data.stderr };
+    }
+    const data = (await resp.json().catch(() => ({ error: 'unknown' }))) as { error: string };
+    return { state: 'error', message: data.error };
+  } catch {
+    return { state: 'helper-down' };
+  }
+}
+
+// 列所有 git tag + 當前 HEAD + origin/main hash
+export type ListTagsResult =
+  | {
+      state: 'ok';
+      tags: string[];
+      currentHash: string;
+      currentTag: string | null;
+      latestMain: string;
+    }
+  | { state: 'error'; message: string }
+  | { state: 'helper-down' };
+
+export async function listTags(): Promise<ListTagsResult> {
+  try {
+    const resp = await fetch(`${HELPER_BASE}/list-tags`);
+    if (resp.ok) {
+      const data = (await resp.json()) as {
+        tags: string[];
+        currentHash: string;
+        currentTag: string | null;
+        latestMain: string;
+      };
+      return { state: 'ok', ...data };
+    }
+    const data = (await resp.json().catch(() => ({ error: 'unknown' }))) as { error: string };
+    return { state: 'error', message: data.error };
+  } catch {
+    return { state: 'helper-down' };
+  }
+}
+
+// 寫 backup 到 dataRoot/app-backups/<name>（master only）
+export type WriteBackupResult =
+  | { state: 'ok'; path: string; size: number }
+  | { state: 'error'; message: string }
+  | { state: 'helper-down' };
+
+export async function writeBackup(name: string, jsonContent: string): Promise<WriteBackupResult> {
+  try {
+    const resp = await fetch(
+      `${HELPER_BASE}/write-backup?name=${encodeURIComponent(name)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: jsonContent,
+      },
+    );
+    if (resp.ok) {
+      const data = (await resp.json()) as { ok: boolean; path: string; size: number };
+      return { state: 'ok', path: data.path, size: data.size };
     }
     const data = (await resp.json().catch(() => ({ error: 'unknown' }))) as { error: string };
     return { state: 'error', message: data.error };

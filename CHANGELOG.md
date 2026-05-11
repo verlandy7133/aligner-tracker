@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.1.16 — 2026-05-07
+
+左右獨立 size slider + 單張照片獨立縮放（PhotoMeta.displayScale）。
+
+### 變動
+
+- **拆成左右兩個獨立 slider**（取代 v0.1.15 全域一個）：
+  - 人像區尺寸（localStorage `aligner-portrait-size`）
+  - 牙齒區尺寸（localStorage `aligner-teeth-size`）
+  - 各自 slider 放在自己框框 header 右側
+- **單張照片獨立縮放**（編輯 modal 加 slider）：
+  - 0.5x ~ 2.0x、步進 0.1
+  - 存進 `PhotoMeta.displayScale`、跟著 rotate / flip 一起套 CSS transform
+  - 跨機 sync 自動同步
+- 「⟲ 還原」按鈕現在也清掉 displayScale
+
 ## v0.1.15 — 2026-05-07
 
 框線明顯化 + 整體尺寸可調 slider。

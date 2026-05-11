@@ -31,20 +31,28 @@ export default function PatientNotesSection({ patient }: { patient: Patient }) {
 }
 
 /* ─── 14-slot 病歷照片 grid（按 group 分區）──────── */
-const PHOTO_SIZE_KEY = 'aligner-photo-size'; // localStorage key for zoom slider
+const PORTRAIT_SIZE_KEY = 'aligner-portrait-size'; // localStorage key (人像區尺寸)
+const TEETH_SIZE_KEY = 'aligner-teeth-size'; // localStorage key (牙齒區尺寸)
+
+function loadSizeFromStorage(key: string): number {
+  const stored = localStorage.getItem(key);
+  const n = stored ? parseInt(stored, 10) : NaN;
+  return !isNaN(n) && n >= 50 && n <= 100 ? n : 100;
+}
 
 function PhotoSlotGrid({ patient }: { patient: Patient }) {
   const [picker, setPicker] = useState<{ slot: PhotoSlot; label: string } | null>(null);
   const [editor, setEditor] = useState<{ slot: PhotoSlot; label: string; meta: PhotoMeta } | null>(null);
-  // 整體尺寸 slider — 50%~100%，存 localStorage 跨 session 沿用
-  const [photoSize, setPhotoSize] = useState<number>(() => {
-    const stored = localStorage.getItem(PHOTO_SIZE_KEY);
-    const n = stored ? parseInt(stored, 10) : NaN;
-    return !isNaN(n) && n >= 50 && n <= 100 ? n : 100;
-  });
-  function savePhotoSize(n: number) {
-    setPhotoSize(n);
-    localStorage.setItem(PHOTO_SIZE_KEY, String(n));
+  // 左右獨立尺寸 slider — 各 50%~100%，存 localStorage 跨 session 沿用
+  const [portraitSize, setPortraitSize] = useState<number>(() => loadSizeFromStorage(PORTRAIT_SIZE_KEY));
+  const [teethSize, setTeethSize] = useState<number>(() => loadSizeFromStorage(TEETH_SIZE_KEY));
+  function savePortraitSize(n: number) {
+    setPortraitSize(n);
+    localStorage.setItem(PORTRAIT_SIZE_KEY, String(n));
+  }
+  function saveTeethSize(n: number) {
+    setTeethSize(n);
+    localStorage.setItem(TEETH_SIZE_KEY, String(n));
   }
 
   // 按 group 分組
@@ -72,52 +80,30 @@ function PhotoSlotGrid({ patient }: { patient: Patient }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
+      <div className="mb-3">
         <h3 className="text-xs uppercase tracking-wider text-zinc-500 font-medium">
           病歷照片
           <span className="ml-2 text-[10px] text-zinc-600 normal-case tracking-normal">
             來源：<code>{patient.sourceFolder}</code>
           </span>
+          <span className="ml-2 text-[10px] text-zinc-600 normal-case tracking-normal">
+            · 單張照片獨立縮放：點 ✎ 開編輯 modal
+          </span>
         </h3>
-        {/* 尺寸調整 slider */}
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] text-zinc-500">尺寸</span>
-          <input
-            type="range"
-            min={50}
-            max={100}
-            step={5}
-            value={photoSize}
-            onChange={(e) => savePhotoSize(Number(e.target.value))}
-            className="w-32 accent-sky-500"
-            title="拖曳調整整體照片區尺寸"
-          />
-          <span className="text-[10px] text-zinc-400 tabular w-9 text-right">{photoSize}%</span>
-          {photoSize !== 100 && (
-            <button
-              onClick={() => savePhotoSize(100)}
-              className="text-[10px] text-zinc-500 hover:text-zinc-200 px-1.5 py-0.5 rounded hover:bg-zinc-800 transition"
-              title="重設"
-            >
-              ⟲
-            </button>
-          )}
-        </div>
       </div>
-      {/* 左半（人像、寬一點）| 右半（牙齒系列、窄一點 → 照片縮小）
-          外層 maxWidth 跟 photoSize 連動、整體可縮放 */}
-      <div
-        className="grid grid-cols-1 lg:grid-cols-[7fr_5fr] gap-4"
-        style={{ maxWidth: `${photoSize}%` }}
-      >
-        {/* Left: portrait 框框 — 加粗 border + 亮色 */}
+      {/* 左半（人像、寬一點）| 右半（牙齒系列、窄一點）— 各自帶獨立 size slider */}
+      <div className="grid grid-cols-1 lg:grid-cols-[7fr_5fr] gap-4">
+        {/* Left: portrait 框框 — 加粗 border + 亮色 + 自己的 size slider */}
         <div className="rounded-lg border-2 border-zinc-600 bg-zinc-950/40 p-4">
-          <div className="text-xs text-zinc-200 mb-3 font-semibold flex items-center gap-2">
-            <span className="text-base">🙂</span>
-            <span>{PHOTO_GROUP_LABEL.portrait}</span>
-            <span className="text-[10px] text-zinc-500 font-normal">（{byGroup.portrait.length}）</span>
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div className="text-xs text-zinc-200 font-semibold flex items-center gap-2">
+              <span className="text-base">🙂</span>
+              <span>{PHOTO_GROUP_LABEL.portrait}</span>
+              <span className="text-[10px] text-zinc-500 font-normal">（{byGroup.portrait.length}）</span>
+            </div>
+            <SizeSlider value={portraitSize} onChange={savePortraitSize} title="調整人像區尺寸" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3" style={{ maxWidth: `${portraitSize}%` }}>
             {byGroup.portrait.map((slot) => (
               <PhotoSlotCell
                 key={slot.key}
@@ -132,35 +118,40 @@ function PhotoSlotGrid({ patient }: { patient: Patient }) {
           </div>
         </div>
 
-        {/* Right: 牙齒系列框框 */}
+        {/* Right: 牙齒系列框框 — 自己的 size slider */}
         <div className="rounded-lg border-2 border-zinc-600 bg-zinc-950/40 p-4 space-y-4">
-          <div className="text-xs text-zinc-200 font-semibold flex items-center gap-2">
-            <span className="text-base">🦷</span>
-            <span>牙齒</span>
-            <span className="text-[10px] text-zinc-500 font-normal">
-              （{byGroup.xray.length + byGroup.extraoral.length + byGroup.intraoral.length}）
-            </span>
-          </div>
-          {(['xray', 'extraoral', 'intraoral'] as PhotoSlotGroup[]).map((group) => (
-            <div key={group}>
-              <div className="text-[10px] text-zinc-400 mb-1.5 font-medium">
-                {PHOTO_GROUP_LABEL[group]}（{byGroup[group].length}）
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {byGroup[group].map((slot) => (
-                  <PhotoSlotCell
-                    key={slot.key}
-                    patient={patient}
-                    slotKey={slot.key}
-                    slotLabel={slot.label}
-                    meta={patient.photos?.[slot.key]}
-                    onPickClick={() => setPicker({ slot: slot.key, label: slot.label })}
-                    onEditClick={(meta) => setEditor({ slot: slot.key, label: slot.label, meta })}
-                  />
-                ))}
-              </div>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="text-xs text-zinc-200 font-semibold flex items-center gap-2">
+              <span className="text-base">🦷</span>
+              <span>牙齒</span>
+              <span className="text-[10px] text-zinc-500 font-normal">
+                （{byGroup.xray.length + byGroup.extraoral.length + byGroup.intraoral.length}）
+              </span>
             </div>
-          ))}
+            <SizeSlider value={teethSize} onChange={saveTeethSize} title="調整牙齒區尺寸" />
+          </div>
+          <div style={{ maxWidth: `${teethSize}%` }} className="space-y-4">
+            {(['xray', 'extraoral', 'intraoral'] as PhotoSlotGroup[]).map((group) => (
+              <div key={group}>
+                <div className="text-[10px] text-zinc-400 mb-1.5 font-medium">
+                  {PHOTO_GROUP_LABEL[group]}（{byGroup[group].length}）
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {byGroup[group].map((slot) => (
+                    <PhotoSlotCell
+                      key={slot.key}
+                      patient={patient}
+                      slotKey={slot.key}
+                      slotLabel={slot.label}
+                      meta={patient.photos?.[slot.key]}
+                      onPickClick={() => setPicker({ slot: slot.key, label: slot.label })}
+                      onEditClick={(meta) => setEditor({ slot: slot.key, label: slot.label, meta })}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
       {picker && (
@@ -191,7 +182,45 @@ function buildPhotoTransform(meta: PhotoMeta | undefined): string {
   if (meta.rotate) parts.push(`rotate(${meta.rotate}deg)`);
   if (meta.flipH) parts.push('scaleX(-1)');
   if (meta.flipV) parts.push('scaleY(-1)');
+  if (meta.displayScale && meta.displayScale !== 1) parts.push(`scale(${meta.displayScale})`);
   return parts.join(' ');
+}
+
+/* ─── 共用 size slider component ──────────────────── */
+function SizeSlider({
+  value,
+  onChange,
+  title,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+  title: string;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-[10px] text-zinc-500">尺寸</span>
+      <input
+        type="range"
+        min={50}
+        max={100}
+        step={5}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-24 accent-sky-500"
+        title={title}
+      />
+      <span className="text-[10px] text-zinc-400 tabular w-8 text-right">{value}%</span>
+      {value !== 100 && (
+        <button
+          onClick={() => onChange(100)}
+          className="text-[10px] text-zinc-500 hover:text-zinc-200 px-1 py-0.5 rounded hover:bg-zinc-800 transition"
+          title="重設 100%"
+        >
+          ⟲
+        </button>
+      )}
+    </div>
+  );
 }
 
 function PhotoSlotCell({
@@ -312,6 +341,9 @@ function PhotoEditorModal({
   function toggleFlipV() {
     setMeta({ ...meta, flipV: !meta.flipV });
   }
+  function setDisplayScale(scale: number) {
+    setMeta({ ...meta, displayScale: scale });
+  }
   function reset() {
     setMeta({ filename: meta.filename }); // 清掉所有 transform
   }
@@ -327,7 +359,10 @@ function PhotoEditorModal({
   const dirty =
     meta.rotate !== initialMeta.rotate ||
     meta.flipH !== initialMeta.flipH ||
-    meta.flipV !== initialMeta.flipV;
+    meta.flipV !== initialMeta.flipV ||
+    (meta.displayScale ?? 1) !== (initialMeta.displayScale ?? 1);
+
+  const currentScale = meta.displayScale ?? 1;
 
   return (
     <div
@@ -399,17 +434,41 @@ function PhotoEditorModal({
             </button>
             <button
               onClick={reset}
-              disabled={!meta.rotate && !meta.flipH && !meta.flipV}
+              disabled={!meta.rotate && !meta.flipH && !meta.flipV && currentScale === 1}
               className="px-3 py-2 rounded-md text-sm border border-zinc-700 text-zinc-400 hover:bg-zinc-800 transition disabled:opacity-40"
               title="清掉所有編輯"
             >
               ⟲ 還原
             </button>
           </div>
+          {/* 單張照片獨立縮放 slider — 0.5x ~ 2.0x */}
+          <div className="mt-4 flex items-center gap-3 px-1">
+            <span className="text-xs text-zinc-400 font-medium w-12">縮放</span>
+            <input
+              type="range"
+              min={0.5}
+              max={2.0}
+              step={0.1}
+              value={currentScale}
+              onChange={(e) => setDisplayScale(Number(e.target.value))}
+              className="flex-1 accent-sky-500"
+              title="這張照片在 cell 內的視覺縮放（不動原檔）"
+            />
+            <span className="tabular text-xs text-zinc-300 w-12 text-right">{Math.round(currentScale * 100)}%</span>
+            {currentScale !== 1 && (
+              <button
+                onClick={() => setDisplayScale(1)}
+                className="text-[10px] text-zinc-500 hover:text-zinc-200 px-1.5 py-0.5 rounded hover:bg-zinc-800 transition"
+                title="重設 100%"
+              >
+                ⟲
+              </button>
+            )}
+          </div>
           <p className="text-[11px] text-zinc-500 mt-3">
-            旋轉 / 翻轉只存「設定」、不動原始檔。其他機從 NAS 拉到 sync.json 也會套用同樣 transform。
+            所有編輯只存「設定」、不動原始檔。其他機從 NAS 拉到 sync.json 也會套用同樣 transform。
             <br />
-            目前狀態：旋轉 {meta.rotate ?? 0}° · 水平翻轉 {meta.flipH ? '是' : '否'} · 垂直翻轉 {meta.flipV ? '是' : '否'}
+            目前狀態：旋轉 {meta.rotate ?? 0}° · 水平翻轉 {meta.flipH ? '是' : '否'} · 垂直翻轉 {meta.flipV ? '是' : '否'} · 縮放 {Math.round(currentScale * 100)}%
           </p>
         </div>
         <footer className="px-6 py-3 border-t border-zinc-800 flex items-center justify-end gap-2">

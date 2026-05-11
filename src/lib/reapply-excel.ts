@@ -202,7 +202,13 @@ export async function reapplyExcelUpdates(): Promise<ReapplyResult> {
       result.newPatients.skippedExisted++;
       continue;
     }
-    await db.patients.put(np);
+    // v0.1.9：JSON 可能沒帶 markdownNote/photos（Python script 不寫這兩欄）→ 補預設
+    const enriched: Patient = {
+      ...np,
+      markdownNote: np.markdownNote ?? '',
+      photos: np.photos ?? {},
+    };
+    await db.patients.put(enriched);
     result.newPatients.added++;
   }
 

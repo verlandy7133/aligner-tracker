@@ -21,6 +21,28 @@ export type PatientFlag =
   | 'needs-followup'
   | 'brand-switched-to-invisalign';
 
+// 病歷照片 8-slot：對齊一般矯正 case report extra-oral + intra-oral series
+export type PhotoSlot =
+  | 'pano'
+  | 'ceph'
+  | 'frontClosed'
+  | 'frontOpen'
+  | 'leftClosed'
+  | 'rightClosed'
+  | 'upperOcclusal'
+  | 'lowerOcclusal';
+
+export const PHOTO_SLOTS: { key: PhotoSlot; label: string; group: 'xray' | 'extraoral' | 'intraoral' }[] = [
+  { key: 'pano', label: 'Panoramic (Pano)', group: 'xray' },
+  { key: 'ceph', label: 'Cephalometric (Ceph)', group: 'xray' },
+  { key: 'frontClosed', label: 'Front (Closed)', group: 'extraoral' },
+  { key: 'frontOpen', label: 'Front (Open)', group: 'extraoral' },
+  { key: 'leftClosed', label: 'Left (Closed)', group: 'intraoral' },
+  { key: 'rightClosed', label: 'Right (Closed)', group: 'intraoral' },
+  { key: 'upperOcclusal', label: 'Upper Occlusal', group: 'intraoral' },
+  { key: 'lowerOcclusal', label: 'Lower Occlusal', group: 'intraoral' },
+];
+
 export type Patient = {
   id: string;
   chartNo: string;
@@ -52,6 +74,10 @@ export type Patient = {
   notes: string;
   sourceFolder: string;
   allSourceFolders?: string[];
+
+  // ─── 病患筆記 + 8-slot 病歷照片（v0.1.9 新增）──────
+  markdownNote: string; // 自由格式筆記、之後可接 markdown render
+  photos: Partial<Record<PhotoSlot, string>>; // slot → 相對於 sourceFolder 的檔名（例 'frontClosed.jpg'）
 
   createdAt: string;
   updatedAt: string;

@@ -19,6 +19,7 @@ import {
 } from '../labels';
 import { deriveProgress } from '../lib/progress';
 import PatientFormModal from '../components/PatientFormModal';
+import PatientNotesSection from '../components/PatientNotesSection';
 import { callHelper, findAndOpenPdf, createFolder, describeHelperFailure } from '../lib/helper-client';
 
 // 把西元 birthday (YYYY-MM-DD) 轉成民國格式 (民國YYMMDD 或 民國YYYMMDD)
@@ -272,6 +273,9 @@ export default function PatientDetailPage() {
           </p>
         </Card>
       </div>
+
+      {/* 病患筆記 + 8-slot 病歷照片 */}
+      <PatientNotesSection patient={patient} />
 
       {/* 下單紀錄 */}
       <section>

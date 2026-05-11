@@ -577,6 +577,101 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // 列指定資料夾底下所有圖片檔（給病患照片 slot 選擇器用）
+  // query: folder=<path>, types=jpg,png,jpeg,heic (預設這四個)
+  if (url.pathname === '/list-folder-files') {
+    const target = url.searchParams.get('folder');
+    if (!target) {
+      res.statusCode = 400;
+      res.end('missing folder');
+      return;
+    }
+    const typesParam = url.searchParams.get('types') || 'jpg,jpeg,png,heic';
+    const types = typesParam.toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
+    const remapped = remapPath(target);
+    const allowed = getAllowedRoots();
+    if (!allowed.some((root) => remapped.startsWith(root))) {
+      res.statusCode = 403;
+      res.end(`not in allowlist (allowed: ${allowed.join(', ')})`);
+      return;
+    }
+    if (!fs.existsSync(remapped)) {
+      res.statusCode = 404;
+      res.end(`folder not found: ${remapped}`);
+      return;
+    }
+    try {
+      const entries = fs.readdirSync(remapped, { withFileTypes: true });
+      const files = entries
+        .filter((e) => e.isFile())
+        .map((e) => e.name)
+        .filter((n) => {
+          const ext = path.extname(n).slice(1).toLowerCase();
+          return types.includes(ext);
+        })
+        .sort();
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ folder: remapped, count: files.length, names: files }));
+    } catch (e) {
+      res.statusCode = 500;
+      res.end(`readdir failed: ${e.message}`);
+    }
+    return;
+  }
+
+  // 串圖片 binary（用 <img src="http://localhost:8765/serve-image?path=..."> 引用）
+  if (url.pathname === '/serve-image') {
+    const target = url.searchParams.get('path');
+    if (!target) {
+      res.statusCode = 400;
+      res.end('missing path');
+      return;
+    }
+    const remapped = remapPath(target);
+    const allowed = getAllowedRoots();
+    if (!allowed.some((root) => remapped.startsWith(root))) {
+      res.statusCode = 403;
+      res.end(`not in allowlist`);
+      return;
+    }
+    if (!fs.existsSync(remapped)) {
+      res.statusCode = 404;
+      res.end(`not found: ${remapped}`);
+      return;
+    }
+    const ext = path.extname(remapped).slice(1).toLowerCase();
+    const mime = (
+      {
+        jpg: 'image/jpeg',
+        jpeg: 'image/jpeg',
+        png: 'image/png',
+        gif: 'image/gif',
+        webp: 'image/webp',
+        heic: 'image/heic',
+        heif: 'image/heif',
+        bmp: 'image/bmp',
+        tiff: 'image/tiff',
+      }[ext]
+    ) || 'application/octet-stream';
+    try {
+      const stat = fs.statSync(remapped);
+      res.setHeader('Content-Type', mime);
+      res.setHeader('Content-Length', stat.size);
+      res.setHeader('Cache-Control', 'public, max-age=300'); // 5 分鐘 cache（圖換了會過期）
+      const stream = fs.createReadStream(remapped);
+      stream.pipe(res);
+      stream.on('error', (e) => {
+        console.error('[folder-helper] serve-image stream error:', e);
+        if (!res.headersSent) res.statusCode = 500;
+        res.end();
+      });
+    } catch (e) {
+      res.statusCode = 500;
+      res.end(`stat/stream failed: ${e.message}`);
+    }
+    return;
+  }
+
   // 列出指定資料夾底下所有 subfolder 名（給 App 端做 name match 用）
   if (url.pathname === '/list-folder-names') {
     const target = url.searchParams.get('folder');

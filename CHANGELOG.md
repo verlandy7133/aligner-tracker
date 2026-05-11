@@ -1,5 +1,51 @@
 # Changelog
 
+## v0.1.9 — 2026-05-07
+
+病患筆記 + 8-slot 病歷照片（從病患資料夾選照片、不複製檔案）。
+完整 hybrid plan 三波的第一波，今天先做 1a + 2a-i + 2b-B；下一版做 PDF 匯出（2a-ii），再下一版做 AI 智能填入（2b-C）。
+
+### 新增
+
+- **病患筆記區塊**（PatientDetailPage 詳細頁底下、下單紀錄上面）
+  - markdown 風格 textarea、`monospace` 字型、auto-save（停止輸入 0.5 秒）
+  - 預期之後接 react-markdown render preview（這版先 plain text）
+  - 寫入 `patient.markdownNote`
+- **8-slot 病歷照片 grid**：對齊一般矯正 case report 標準 8 view
+  - Panoramic / Cephalometric (X-ray)
+  - Front Closed / Front Open (extraoral)
+  - Left Closed / Right Closed / Upper Occlusal / Lower Occlusal (intraoral)
+  - 點空 slot → 列病患資料夾所有圖片 → 選一張綁定
+  - 點有照片 slot → 「換」/「✗」hover actions
+  - 已被其他 slot 使用的圖會標 amber 「已用」徽章（不擋、提示）
+  - 寫入 `patient.photos[slot] = 相對檔名`（不複製檔案、只記檔名）
+- **helper 加 2 endpoints**：
+  - `GET /list-folder-files?folder=&types=`：列指定資料夾下所有圖片檔（預設 jpg/jpeg/png/heic）
+  - `GET /serve-image?path=`：串本機圖片 binary + 適當 Content-Type + 5min Cache-Control
+- **`getImageUrl(absPath)` helper-client wrapper**：產出 `<img src=...>` 用的 URL
+- **`listFolderFiles()` wrapper**：對應上面 endpoint
+
+### 資料模型
+
+- `Patient` 加 `markdownNote: string` + `photos: Partial<Record<PhotoSlot, string>>`
+- `PhotoSlot` 8 個 enum + `PHOTO_SLOTS` 設定表（含中文 / 英文 label + 分組）
+- **Dexie schema 升 v6**：upgrade callback 補舊資料預設值（`markdownNote = ''`、`photos = {}`）
+- `scan-aligner-folders.mjs`、`PatientFormModal.tsx`、`reapply-excel.ts` 都同步補預設值
+
+### 設計筆記
+
+- **照片不複製、只記檔名**：避免 IndexedDB 爆 + 沒有同步成本。照片實體還是在 NAS 病患資料夾、App 只記「哪個檔名綁哪個 slot」
+- **HEIC 顯示**：helper `/serve-image` 設 Content-Type `image/heic`、現代 Safari 直接顯示；Chrome 對 HEIC 不友善，可能要 v0.1.10 加伺服器端轉檔
+- **沒 sourceFolder → 顯示提示**：病患如果還沒設資料夾、photo grid 區顯示 warning 引導去點「📁 開資料夾」先建立
+- **跨機 sync**：markdownNote + photos 自動跟著 `backup.ts` exportBackup / importBackup 走 sync.json，不用額外處理
+
+### 已知問題
+
+- markdown render preview 還沒做（這版純 textarea）→ v0.1.10
+- HEIC 在 Chrome 顯示不出來 → v0.1.10 helper 加 on-the-fly HEIC → JPG 轉檔
+- PDF case report 匯出還沒做 → v0.1.10（2a-ii）
+- AI 智能填入還沒做 → v0.1.11（2b-C）
+
 ## v0.1.8 — 2026-05-07
 
 選版本更新 + 切版前自動備份。

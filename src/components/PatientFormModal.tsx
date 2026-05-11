@@ -297,6 +297,11 @@ export default function PatientFormModal({ target, prefillName, onClose }: Patie
       notes: form.notes.trim(),
       sourceFolder:
         mode === 'edit' && target !== 'new' && target !== null ? target.sourceFolder : '',
+      // v0.1.9 加 markdownNote + photos：edit 模式保留、new 模式空字串 + 空 object
+      markdownNote:
+        mode === 'edit' && target !== 'new' && target !== null ? target.markdownNote ?? '' : '',
+      photos:
+        mode === 'edit' && target !== 'new' && target !== null ? target.photos ?? {} : {},
       createdAt:
         mode === 'edit' && target !== 'new' && target !== null ? target.createdAt : now,
       updatedAt: now,

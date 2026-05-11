@@ -60,6 +60,24 @@ class AlignerDB extends Dexie {
       orders: 'id, patientId, patientChartNo, date, doctor, progress, lab',
       settings: 'key',
     });
+
+    // v6: patient 加 markdownNote + photos (8-slot)
+    // schema 形狀不變（沒加 index），只在 upgrade 補預設值給舊資料
+    this.version(6)
+      .stores({
+        patients: 'id, chartNo, name, status, productLine, nextVisit, orderDate, doctor, *flags',
+        orders: 'id, patientId, patientChartNo, date, doctor, progress, lab',
+        settings: 'key',
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table('patients')
+          .toCollection()
+          .modify((p: Record<string, unknown>) => {
+            if (p.markdownNote == null) p.markdownNote = '';
+            if (p.photos == null) p.photos = {};
+          });
+      });
   }
 }
 

@@ -48,6 +48,31 @@ export async function listFolderNames(folder: string): Promise<{ names: string[]
   }
 }
 
+// 列指定資料夾底下所有圖片檔（給病患照片 slot 選擇器用）
+export async function listFolderFiles(
+  folder: string,
+  types: string[] = ['jpg', 'jpeg', 'png', 'heic'],
+): Promise<{ names: string[]; folder: string } | { error: string }> {
+  try {
+    const typesParam = types.join(',');
+    const resp = await fetch(
+      `${HELPER_BASE}/list-folder-files?folder=${encodeURIComponent(folder)}&types=${encodeURIComponent(typesParam)}`,
+    );
+    if (resp.ok) {
+      const data = (await resp.json()) as { folder: string; count: number; names: string[] };
+      return { names: data.names, folder: data.folder };
+    }
+    return { error: await resp.text() };
+  } catch {
+    return { error: 'helper-down' };
+  }
+}
+
+// 產出 <img src="..."> 用的 URL（透過 helper /serve-image 串本機圖片）
+export function getImageUrl(absolutePath: string): string {
+  return `${HELPER_BASE}/serve-image?path=${encodeURIComponent(absolutePath)}`;
+}
+
 // 建立資料夾（master 才能；follower 會回 403）
 export type CreateFolderResult =
   | { state: 'created'; path: string }

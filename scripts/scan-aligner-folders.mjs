@@ -252,6 +252,8 @@ const patients = collected.map((p, i) => ({
   notes: p.notes,
   sourceFolder: p.sourceFolder,
   allSourceFolders: [p.sourceFolder],
+  markdownNote: '', // v0.1.9 新欄位、user 之後在 App 內填
+  photos: {}, // v0.1.9 新欄位、user 之後在 App 內選照片
   createdAt: now,
   updatedAt: now,
 }));

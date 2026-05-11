@@ -186,6 +186,14 @@ function buildPhotoTransform(meta: PhotoMeta | undefined): string {
   return parts.join(' ');
 }
 
+/* ─── 計算 CSS filter 給 <img> 套用（亮度等）──────── */
+function buildPhotoFilter(meta: PhotoMeta | undefined): string {
+  if (!meta) return '';
+  const parts: string[] = [];
+  if (meta.brightness && meta.brightness !== 1) parts.push(`brightness(${meta.brightness})`);
+  return parts.join(' ');
+}
+
 /* ─── 共用 size slider component ──────────────────── */
 function SizeSlider({
   value,
@@ -241,6 +249,7 @@ function PhotoSlotCell({
   const fullPath = meta ? `${patient.sourceFolder}\\${meta.filename}` : null;
   const imageUrl = fullPath ? getImageUrl(fullPath) : null;
   const transform = buildPhotoTransform(meta);
+  const filter = buildPhotoFilter(meta);
   // 旋轉 90/270 時、aspect 變橫長 → 圖會被 4:3 框裁掉、加 scale 補救
   const isQuarterRotate = meta?.rotate === 90 || meta?.rotate === 270;
 
@@ -274,6 +283,7 @@ function PhotoSlotCell({
         className="w-full h-full object-cover transition-transform"
         style={{
           transform,
+          filter,
           // 旋轉 90/270 時調 scale 避免邊緣裁切（簡化版：縮小一點點容下橫長圖）
           ...(isQuarterRotate ? { scale: '0.75' } : {}),
         }}
@@ -329,6 +339,7 @@ function PhotoEditorModal({
   const [meta, setMeta] = useState<PhotoMeta>(initialMeta);
   const fullPath = `${patient.sourceFolder}\\${meta.filename}`;
   const transform = buildPhotoTransform(meta);
+  const filter = buildPhotoFilter(meta);
 
   function rotate(delta: 90 | -90) {
     const cur = meta.rotate ?? 0;
@@ -343,6 +354,9 @@ function PhotoEditorModal({
   }
   function setDisplayScale(scale: number) {
     setMeta({ ...meta, displayScale: scale });
+  }
+  function setBrightness(b: number) {
+    setMeta({ ...meta, brightness: b });
   }
   function reset() {
     setMeta({ filename: meta.filename }); // 清掉所有 transform
@@ -360,9 +374,11 @@ function PhotoEditorModal({
     meta.rotate !== initialMeta.rotate ||
     meta.flipH !== initialMeta.flipH ||
     meta.flipV !== initialMeta.flipV ||
-    (meta.displayScale ?? 1) !== (initialMeta.displayScale ?? 1);
+    (meta.displayScale ?? 1) !== (initialMeta.displayScale ?? 1) ||
+    (meta.brightness ?? 1) !== (initialMeta.brightness ?? 1);
 
   const currentScale = meta.displayScale ?? 1;
+  const currentBrightness = meta.brightness ?? 1;
 
   return (
     <div
@@ -391,7 +407,7 @@ function PhotoEditorModal({
               src={getImageUrl(fullPath)}
               alt={slotLabel}
               className="max-w-full max-h-full object-contain transition-transform"
-              style={{ transform }}
+              style={{ transform, filter }}
             />
           </div>
           {/* toolbar */}
@@ -434,14 +450,14 @@ function PhotoEditorModal({
             </button>
             <button
               onClick={reset}
-              disabled={!meta.rotate && !meta.flipH && !meta.flipV && currentScale === 1}
+              disabled={!meta.rotate && !meta.flipH && !meta.flipV && currentScale === 1 && currentBrightness === 1}
               className="px-3 py-2 rounded-md text-sm border border-zinc-700 text-zinc-400 hover:bg-zinc-800 transition disabled:opacity-40"
               title="清掉所有編輯"
             >
               ⟲ 還原
             </button>
           </div>
-          {/* 單張照片獨立縮放 slider — 0.5x ~ 2.0x */}
+          {/* 縮放 slider — 0.5x ~ 2.0x */}
           <div className="mt-4 flex items-center gap-3 px-1">
             <span className="text-xs text-zinc-400 font-medium w-12">縮放</span>
             <input
@@ -465,10 +481,34 @@ function PhotoEditorModal({
               </button>
             )}
           </div>
+          {/* 亮度 slider — 0.5 ~ 1.5（CSS filter brightness）*/}
+          <div className="mt-2 flex items-center gap-3 px-1">
+            <span className="text-xs text-zinc-400 font-medium w-12">亮度</span>
+            <input
+              type="range"
+              min={0.5}
+              max={1.5}
+              step={0.05}
+              value={currentBrightness}
+              onChange={(e) => setBrightness(Number(e.target.value))}
+              className="flex-1 accent-amber-500"
+              title="CSS filter brightness — 1.0 是原圖、< 1 變暗、> 1 變亮"
+            />
+            <span className="tabular text-xs text-zinc-300 w-12 text-right">{Math.round(currentBrightness * 100)}%</span>
+            {currentBrightness !== 1 && (
+              <button
+                onClick={() => setBrightness(1)}
+                className="text-[10px] text-zinc-500 hover:text-zinc-200 px-1.5 py-0.5 rounded hover:bg-zinc-800 transition"
+                title="重設 100%"
+              >
+                ⟲
+              </button>
+            )}
+          </div>
           <p className="text-[11px] text-zinc-500 mt-3">
-            所有編輯只存「設定」、不動原始檔。其他機從 NAS 拉到 sync.json 也會套用同樣 transform。
+            所有編輯只存「設定」、不動原始檔。其他機從 NAS 拉到 sync.json 也會套用同樣設定。
             <br />
-            目前狀態：旋轉 {meta.rotate ?? 0}° · 水平翻轉 {meta.flipH ? '是' : '否'} · 垂直翻轉 {meta.flipV ? '是' : '否'} · 縮放 {Math.round(currentScale * 100)}%
+            旋轉 {meta.rotate ?? 0}° · 水平翻轉 {meta.flipH ? '是' : '否'} · 垂直翻轉 {meta.flipV ? '是' : '否'} · 縮放 {Math.round(currentScale * 100)}% · 亮度 {Math.round(currentBrightness * 100)}%
           </p>
         </div>
         <footer className="px-6 py-3 border-t border-zinc-800 flex items-center justify-end gap-2">

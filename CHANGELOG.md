@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.1.17 — 2026-05-07
+
+照片亮度可調（CSS filter brightness）。
+
+### 變動
+
+- **照片亮度 slider**：編輯 modal 加 0.5x ~ 1.5x（步進 0.05）
+  - 純前端 CSS `filter: brightness(...)`、不動原檔
+  - 存進 `PhotoMeta.brightness`、跨機 sync 同步
+  - 同時套用在 cell display + modal preview
+- 「⟲ 還原」按鈕現在也清掉 brightness
+
+### 設計
+
+- CSS filter 跟 transform 是兩個獨立 property、可同時套用、不衝突
+- 之後若需要 contrast / saturation / hue 也都走 `buildPhotoFilter()` 同一條路
+
 ## v0.1.16 — 2026-05-07
 
 左右獨立 size slider + 單張照片獨立縮放（PhotoMeta.displayScale）。

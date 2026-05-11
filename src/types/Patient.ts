@@ -69,13 +69,14 @@ export const PHOTO_GROUP_LABEL: Record<PhotoSlotGroup, string> = {
   intraoral: '口內',
 };
 
-// 每張照片的編輯 metadata（旋轉、翻轉、縮放等純前端 transform、不動原檔）
+// 每張照片的編輯 metadata（旋轉、翻轉、縮放、亮度等純前端 transform、不動原檔）
 export type PhotoMeta = {
   filename: string;
   rotate?: 0 | 90 | 180 | 270; // 順時針度數
   flipH?: boolean; // 水平翻轉
   flipV?: boolean; // 垂直翻轉
   displayScale?: number; // 0.5 ~ 2.0，預設 1.0 — 該 cell 內部 img 的視覺縮放
+  brightness?: number; // 0.5 ~ 1.5，預設 1.0 — CSS filter brightness（1.0 = 原圖）
 };
 
 export type Patient = {

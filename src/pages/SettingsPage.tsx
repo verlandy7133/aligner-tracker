@@ -46,6 +46,14 @@ import {
 } from '../lib/helper-client';
 import { parseFolderName } from '../lib/parse-folder-name';
 import { useScale, saveScale, MIN_SCALE, MAX_SCALE, DEFAULT_SCALE } from '../lib/ui-scale';
+import {
+  usePhotoStyle,
+  savePhotoStyle,
+  DEFAULT_PHOTO_STYLE,
+  MIN_BORDER_WIDTH,
+  MAX_BORDER_WIDTH,
+  PHOTO_COLOR_PRESETS,
+} from '../lib/photo-style';
 
 export default function SettingsPage() {
   return (
@@ -58,6 +66,7 @@ export default function SettingsPage() {
       </header>
 
       <UiScaleSection />
+      <PhotoStyleSection />
       <UpdateSection />
       <PathsSection />
       <SyncSection />
@@ -137,6 +146,148 @@ function UiScaleSection() {
         </div>
         <p className="text-xs text-zinc-500">
           影響整個 App 字級。改完即時生效、自動存。下次開 App 沿用上次設定。
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/* ─── 病歷照片框線（粗細 + 顏色）──────────────────── */
+function PhotoStyleSection() {
+  const style = usePhotoStyle();
+  const isDefault =
+    style.borderWidth === DEFAULT_PHOTO_STYLE.borderWidth &&
+    style.borderColor.toLowerCase() === DEFAULT_PHOTO_STYLE.borderColor.toLowerCase();
+
+  return (
+    <section className="rounded-xl border border-zinc-800 bg-zinc-900/30">
+      <header className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-medium text-zinc-200">病歷照片框線</h2>
+          <span className="text-xs text-zinc-500">
+            粗細 {style.borderWidth}px · 顏色{' '}
+            <span
+              className="inline-block w-3 h-3 rounded border border-zinc-700 align-middle"
+              style={{ background: style.borderColor }}
+            />{' '}
+            <code className="text-[10px]">{style.borderColor}</code>
+          </span>
+        </div>
+        <button
+          onClick={() => savePhotoStyle(DEFAULT_PHOTO_STYLE)}
+          disabled={isDefault}
+          className="px-3 py-1.5 rounded-md text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 transition disabled:opacity-50"
+        >
+          重設
+        </button>
+      </header>
+      <div className="p-5 space-y-4">
+        {/* 粗細 */}
+        <div>
+          <div className="text-xs text-zinc-300 mb-2 font-medium">框線粗細</div>
+          <div className="flex items-center gap-3">
+            <input
+              type="range"
+              min={MIN_BORDER_WIDTH}
+              max={MAX_BORDER_WIDTH}
+              step={1}
+              value={style.borderWidth}
+              onChange={(e) =>
+                savePhotoStyle({ ...style, borderWidth: Number(e.target.value) })
+              }
+              className="flex-1 accent-sky-500"
+            />
+            <span className="tabular text-xs text-zinc-300 w-12 text-right">
+              {style.borderWidth}px
+            </span>
+          </div>
+          {/* preset 數字快選 */}
+          <div className="flex gap-1.5 mt-2">
+            {[1, 2, 3, 4, 5, 6].map((w) => (
+              <button
+                key={w}
+                onClick={() => savePhotoStyle({ ...style, borderWidth: w })}
+                className={`px-2 py-1 rounded text-xs border transition ${
+                  style.borderWidth === w
+                    ? 'bg-sky-500/15 border-sky-500/40 text-sky-300'
+                    : 'border-zinc-700 text-zinc-400 hover:bg-zinc-800/60'
+                }`}
+              >
+                {w}px
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 顏色 */}
+        <div>
+          <div className="text-xs text-zinc-300 mb-2 font-medium">框線顏色</div>
+          <div className="flex flex-wrap items-center gap-2">
+            {PHOTO_COLOR_PRESETS.map((p) => {
+              const isActive =
+                style.borderColor.toLowerCase() === p.value.toLowerCase();
+              return (
+                <button
+                  key={p.value}
+                  onClick={() => savePhotoStyle({ ...style, borderColor: p.value })}
+                  title={`${p.label} (${p.value})`}
+                  className={`w-9 h-9 rounded-md border-2 transition ${
+                    isActive ? 'border-sky-400 ring-2 ring-sky-500/30' : 'border-zinc-700 hover:border-zinc-500'
+                  }`}
+                  style={{ background: p.value }}
+                />
+              );
+            })}
+            <div className="flex items-center gap-2 ml-2">
+              <input
+                type="color"
+                value={style.borderColor}
+                onChange={(e) =>
+                  savePhotoStyle({ ...style, borderColor: e.target.value })
+                }
+                className="w-9 h-9 rounded-md border-2 border-zinc-700 cursor-pointer bg-transparent"
+                title="自訂顏色"
+              />
+              <input
+                value={style.borderColor}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (/^#[0-9a-fA-F]{0,8}$/.test(v)) {
+                    savePhotoStyle({ ...style, borderColor: v });
+                  }
+                }}
+                className="h-9 px-3 w-28 rounded-md bg-zinc-900/60 border border-zinc-800 text-sm text-zinc-200 font-mono focus:outline-none focus:border-sky-500/50"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* preview */}
+        <div>
+          <div className="text-xs text-zinc-500 mb-2">預覽</div>
+          <div className="flex gap-3">
+            <div
+              className="w-24 aspect-[4/3] rounded-md bg-zinc-900"
+              style={{
+                borderStyle: 'solid',
+                borderWidth: `${style.borderWidth}px`,
+                borderColor: style.borderColor,
+              }}
+            />
+            <div
+              className="w-24 aspect-[4/3] rounded-md bg-zinc-900"
+              style={{
+                borderStyle: 'dashed',
+                borderWidth: `${style.borderWidth}px`,
+                borderColor: style.borderColor,
+              }}
+            />
+          </div>
+        </div>
+
+        <p className="text-[11px] text-zinc-500 pt-2 border-t border-zinc-800">
+          影響「病歷照片」section 所有 cell + 左右兩個大框的框線。改完即時生效、自動存。
+          設定每台機獨立（不跟 NAS sync）。
         </p>
       </div>
     </section>

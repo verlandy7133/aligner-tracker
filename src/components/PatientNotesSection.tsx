@@ -14,6 +14,7 @@ import { db } from '../db';
 import type { Patient, PhotoMeta, PhotoSlot, PhotoSlotGroup } from '../types/Patient';
 import { PHOTO_SLOTS, PHOTO_GROUP_LABEL } from '../types/Patient';
 import { listFolderFiles, getImageUrl } from '../lib/helper-client';
+import { PHOTO_BORDER_STYLE } from '../lib/photo-style';
 
 export default function PatientNotesSection({ patient }: { patient: Patient }) {
   return (
@@ -93,8 +94,8 @@ function PhotoSlotGrid({ patient }: { patient: Patient }) {
       </div>
       {/* 左半（人像、寬一點）| 右半（牙齒系列、窄一點）— 各自帶獨立 size slider */}
       <div className="grid grid-cols-1 lg:grid-cols-[7fr_5fr] gap-4">
-        {/* Left: portrait 框框 — 加粗 border + 亮色 + 自己的 size slider */}
-        <div className="rounded-lg border-2 border-zinc-600 bg-zinc-950/40 p-4">
+        {/* Left: portrait 框框 — 框線粗細/顏色 走 CSS variable (設定可改) */}
+        <div className="rounded-lg bg-zinc-950/40 p-4" style={PHOTO_BORDER_STYLE}>
           <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
             <div className="text-xs text-zinc-200 font-semibold flex items-center gap-2">
               <span className="text-base">🙂</span>
@@ -118,8 +119,8 @@ function PhotoSlotGrid({ patient }: { patient: Patient }) {
           </div>
         </div>
 
-        {/* Right: 牙齒系列框框 — 自己的 size slider */}
-        <div className="rounded-lg border-2 border-zinc-600 bg-zinc-950/40 p-4 space-y-4">
+        {/* Right: 牙齒系列框框 — 框線走 CSS variable */}
+        <div className="rounded-lg bg-zinc-950/40 p-4 space-y-4" style={PHOTO_BORDER_STYLE}>
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="text-xs text-zinc-200 font-semibold flex items-center gap-2">
               <span className="text-base">🦷</span>
@@ -267,7 +268,8 @@ function PhotoSlotCell({
     return (
       <button
         onClick={onPickClick}
-        className="aspect-[4/3] rounded-md border-2 border-dashed border-zinc-800 bg-zinc-950/40 hover:border-sky-500/40 hover:bg-sky-500/5 transition flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-sky-400 group"
+        style={{ ...PHOTO_BORDER_STYLE, borderStyle: 'dashed' }}
+        className="aspect-[4/3] rounded-md bg-zinc-950/40 hover:bg-sky-500/5 transition flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-sky-400 group"
       >
         <span className="text-2xl opacity-50 group-hover:opacity-100">＋</span>
         <span className="text-[11px] text-center px-2">{slotLabel}</span>
@@ -276,7 +278,10 @@ function PhotoSlotCell({
   }
 
   return (
-    <div className="relative aspect-[4/3] rounded-md overflow-hidden border border-zinc-800 bg-zinc-950 group">
+    <div
+      className="relative aspect-[4/3] rounded-md overflow-hidden bg-zinc-950 group"
+      style={PHOTO_BORDER_STYLE}
+    >
       <img
         src={imageUrl}
         alt={slotLabel}

@@ -9,6 +9,7 @@ import ThemeSelector from './components/ThemeSelector';
 import { seedIfEmpty } from './seed';
 import { useTheme } from './themes';
 import { initScale } from './lib/ui-scale';
+import { initPhotoStyle } from './lib/photo-style';
 import { syncStat } from './lib/helper-client';
 
 const SYNC_LAST_PUSHED_KEY = 'aligner-sync-last-pushed';
@@ -23,6 +24,8 @@ export default function App() {
     seedIfEmpty();
     // 套用儲存的 UI 字級 scale
     initScale();
+    // 套用儲存的 photo 框線樣式（CSS variable）
+    initPhotoStyle();
     // 啟動時偵測 NAS sync.json 是否比本地新
     checkSyncStatus();
     // window focus 時也檢查（例：從另一台推完換回這台）

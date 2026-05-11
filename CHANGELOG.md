@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.1.18 — 2026-05-07
+
+病歷照片框線全域可調（粗細 + 顏色）。
+
+### 新增
+
+- **設定 → 病歷照片框線 section**：
+  - 粗細 slider 1px ~ 6px、附 6 個 preset 快選按鈕
+  - 顏色 picker：8 個 preset（灰/深灰/白/天藍/綠/紫/黃/粉）+ 自訂 color picker + hex 輸入
+  - 即時預覽（solid + dashed 兩種版本）
+- **CSS variable 機制**：寫入 `:root --photo-border-width` / `--photo-border-color`
+  - 所有 photo cell（PHOTO_BORDER_STYLE）+ 左右兩個大框都用 var() 套用
+  - 改完即時全 App 生效
+- 設定每台機獨立（localStorage、不走 NAS sync — 是視覺偏好）
+- App 啟動 `initPhotoStyle()` 套用儲存值
+
+### 變動
+
+- PhotoSlotCell 的 cell border 從寫死 `border-zinc-800` 改成走 CSS var
+- 左右兩個大框（人像 + 牙齒）框線也走 CSS var
+- 預設 2px / zinc-500 (`#71717a`)
+
 ## v0.1.17 — 2026-05-07
 
 照片亮度可調（CSS filter brightness）。

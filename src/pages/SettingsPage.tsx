@@ -163,9 +163,9 @@ function PhotoStyleSection() {
     <section className="rounded-xl border border-zinc-800 bg-zinc-900/30">
       <header className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-medium text-zinc-200">病歷照片框線</h2>
+          <h2 className="text-sm font-medium text-zinc-200">框線樣式</h2>
           <span className="text-xs text-zinc-500">
-            粗細 {style.borderWidth}px · 顏色{' '}
+            全 App · 粗細 {style.borderWidth}px · 顏色{' '}
             <span
               className="inline-block w-3 h-3 rounded border border-zinc-700 align-middle"
               style={{ background: style.borderColor }}
@@ -286,7 +286,12 @@ function PhotoStyleSection() {
         </div>
 
         <p className="text-[11px] text-zinc-500 pt-2 border-t border-zinc-800">
-          影響「病歷照片」section 所有 cell + 左右兩個大框的框線。改完即時生效、自動存。
+          影響全 App 所有框線：
+          <br />
+          · <strong>顏色</strong>套到所有 zinc 灰系框線（病歷照片、Card、設定 section、Modal、表格 等）
+          <br />
+          · <strong>粗細</strong>只套主要結構框（rounded-xl / lg / md + border），不影響 badge / pill / divider 等小元素
+          <br />
           設定每台機獨立（不跟 NAS sync）。
         </p>
       </div>

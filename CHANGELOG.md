@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.1.19 — 2026-05-07
+
+框線樣式從「只影響病歷照片」升級成「全 App 通用」。
+
+### 變動
+
+- **設定 section 改名「框線樣式」**（從「病歷照片框線」）
+- **顏色全 App 套用**：透過 `index.css` global override，所有 `.border-zinc-{600,700,800}` 都吃 `var(--photo-border-color)`
+  - 影響範圍：病歷照片 / PatientDetailPage Card / 設定 section / Modal / 表格 / Nav 等所有用 zinc 灰系 border 的元素
+- **粗細選擇性套用**：只影響「結構框」(`.rounded-xl/lg/md` + `.border` or `.border-2`)、不影響 badge / pill / divider 等小元素
+- 用 `!important` 確保勝過 plain theme 的 border override（plain 主題下也能套）
+
+### 設計筆記
+
+- **CSS variable 機制不變**（沿用 v0.1.18 的 `--photo-border-color` / `--photo-border-width`）
+- **變數名暫不改**（避免 mass rename），但概念已升級為全 App
+- 視覺層級略為扁平化 — 原本不同灰階差異消失、改用 user 設定的單一色
+
 ## v0.1.18 — 2026-05-07
 
 病歷照片框線全域可調（粗細 + 顏色）。

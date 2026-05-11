@@ -199,3 +199,36 @@ html[data-theme="plain"] .rounded-md {
 html[data-theme="plain"] .rounded-full {
   border-radius: 0;
 }
+
+/* ──────────────────────────────────────────────────────
+   全 App 框線樣式（由 設定 → 框線樣式 控制）
+   ─────────────────────────────────────────────────────
+   - CSS variable 由 src/lib/photo-style.ts 寫入 :root
+   - 影響所有 .border-zinc-{600,700,800} 顏色
+   - 粗細只影響「結構框」(.rounded-xl/lg/md + .border or .border-2)、
+     不影響小元素 (badge / pill / divider 等)
+   - 用 !important 確保勝過 theme overrides 跟 Tailwind defaults
+   ────────────────────────────────────────────────────── */
+
+/* 預設值（user 還沒設定時的 fallback、photo-style.ts 啟動時會 overwrite）*/
+:root {
+  --photo-border-width: 2px;
+  --photo-border-color: #71717a;
+}
+
+/* 顏色 — 全 App zinc 灰系框線都套用 */
+.border-zinc-600,
+.border-zinc-700,
+.border-zinc-800 {
+  border-color: var(--photo-border-color) !important;
+}
+
+/* 粗細 — 只套主要結構框（rounded-xl / rounded-lg / rounded-md 同時帶 border 或 border-2 的）*/
+.rounded-xl.border,
+.rounded-xl.border-2,
+.rounded-lg.border,
+.rounded-lg.border-2,
+.rounded-md.border,
+.rounded-md.border-2 {
+  border-width: var(--photo-border-width) !important;
+}

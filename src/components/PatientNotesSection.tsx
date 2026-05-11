@@ -68,12 +68,14 @@ function PhotoSlotGrid({ patient }: { patient: Patient }) {
           </span>
         </h3>
       </div>
-      {/* 左半：人像 (3x2 grid) | 右半：X-ray + 口外 + 口內 (各自 2 col) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left: portrait — 6 個 slot 整齊 2col × 3row */}
-        <div>
-          <div className="text-[10px] text-zinc-500 mb-1.5 font-medium">
-            {PHOTO_GROUP_LABEL.portrait}（{byGroup.portrait.length}）
+      {/* 左半（人像、寬一點）| 右半（牙齒系列、窄一點 → 照片縮小） */}
+      <div className="grid grid-cols-1 lg:grid-cols-[7fr_5fr] gap-4">
+        {/* Left: portrait 框框 */}
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
+          <div className="text-xs text-zinc-300 mb-3 font-medium flex items-center gap-2">
+            <span className="text-base">🙂</span>
+            <span>{PHOTO_GROUP_LABEL.portrait}</span>
+            <span className="text-[10px] text-zinc-500">（{byGroup.portrait.length}）</span>
           </div>
           <div className="grid grid-cols-2 gap-3">
             {byGroup.portrait.map((slot) => (
@@ -90,14 +92,21 @@ function PhotoSlotGrid({ patient }: { patient: Patient }) {
           </div>
         </div>
 
-        {/* Right: 牙齒系列 — xray + 口外 + 口內 垂直堆疊 */}
-        <div className="space-y-4">
+        {/* Right: 牙齒系列框框 — 整體 5/12 寬度、cell 自然縮小 */}
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4 space-y-4">
+          <div className="text-xs text-zinc-300 font-medium flex items-center gap-2">
+            <span className="text-base">🦷</span>
+            <span>牙齒</span>
+            <span className="text-[10px] text-zinc-500">
+              （{byGroup.xray.length + byGroup.extraoral.length + byGroup.intraoral.length}）
+            </span>
+          </div>
           {(['xray', 'extraoral', 'intraoral'] as PhotoSlotGroup[]).map((group) => (
             <div key={group}>
               <div className="text-[10px] text-zinc-500 mb-1.5 font-medium">
                 {PHOTO_GROUP_LABEL[group]}（{byGroup[group].length}）
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2">
                 {byGroup[group].map((slot) => (
                   <PhotoSlotCell
                     key={slot.key}

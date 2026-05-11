@@ -30,10 +30,22 @@ export default function PatientNotesSection({ patient }: { patient: Patient }) {
   );
 }
 
-/* ─── 12-slot 病歷照片 grid（按 group 分區）──────── */
+/* ─── 14-slot 病歷照片 grid（按 group 分區）──────── */
+const PHOTO_SIZE_KEY = 'aligner-photo-size'; // localStorage key for zoom slider
+
 function PhotoSlotGrid({ patient }: { patient: Patient }) {
   const [picker, setPicker] = useState<{ slot: PhotoSlot; label: string } | null>(null);
   const [editor, setEditor] = useState<{ slot: PhotoSlot; label: string; meta: PhotoMeta } | null>(null);
+  // 整體尺寸 slider — 50%~100%，存 localStorage 跨 session 沿用
+  const [photoSize, setPhotoSize] = useState<number>(() => {
+    const stored = localStorage.getItem(PHOTO_SIZE_KEY);
+    const n = stored ? parseInt(stored, 10) : NaN;
+    return !isNaN(n) && n >= 50 && n <= 100 ? n : 100;
+  });
+  function savePhotoSize(n: number) {
+    setPhotoSize(n);
+    localStorage.setItem(PHOTO_SIZE_KEY, String(n));
+  }
 
   // 按 group 分組
   const byGroup = useMemo(() => {
@@ -60,22 +72,50 @@ function PhotoSlotGrid({ patient }: { patient: Patient }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
         <h3 className="text-xs uppercase tracking-wider text-zinc-500 font-medium">
           病歷照片
           <span className="ml-2 text-[10px] text-zinc-600 normal-case tracking-normal">
             來源：<code>{patient.sourceFolder}</code>
           </span>
         </h3>
+        {/* 尺寸調整 slider */}
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-zinc-500">尺寸</span>
+          <input
+            type="range"
+            min={50}
+            max={100}
+            step={5}
+            value={photoSize}
+            onChange={(e) => savePhotoSize(Number(e.target.value))}
+            className="w-32 accent-sky-500"
+            title="拖曳調整整體照片區尺寸"
+          />
+          <span className="text-[10px] text-zinc-400 tabular w-9 text-right">{photoSize}%</span>
+          {photoSize !== 100 && (
+            <button
+              onClick={() => savePhotoSize(100)}
+              className="text-[10px] text-zinc-500 hover:text-zinc-200 px-1.5 py-0.5 rounded hover:bg-zinc-800 transition"
+              title="重設"
+            >
+              ⟲
+            </button>
+          )}
+        </div>
       </div>
-      {/* 左半（人像、寬一點）| 右半（牙齒系列、窄一點 → 照片縮小） */}
-      <div className="grid grid-cols-1 lg:grid-cols-[7fr_5fr] gap-4">
-        {/* Left: portrait 框框 */}
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
-          <div className="text-xs text-zinc-300 mb-3 font-medium flex items-center gap-2">
+      {/* 左半（人像、寬一點）| 右半（牙齒系列、窄一點 → 照片縮小）
+          外層 maxWidth 跟 photoSize 連動、整體可縮放 */}
+      <div
+        className="grid grid-cols-1 lg:grid-cols-[7fr_5fr] gap-4"
+        style={{ maxWidth: `${photoSize}%` }}
+      >
+        {/* Left: portrait 框框 — 加粗 border + 亮色 */}
+        <div className="rounded-lg border-2 border-zinc-600 bg-zinc-950/40 p-4">
+          <div className="text-xs text-zinc-200 mb-3 font-semibold flex items-center gap-2">
             <span className="text-base">🙂</span>
             <span>{PHOTO_GROUP_LABEL.portrait}</span>
-            <span className="text-[10px] text-zinc-500">（{byGroup.portrait.length}）</span>
+            <span className="text-[10px] text-zinc-500 font-normal">（{byGroup.portrait.length}）</span>
           </div>
           <div className="grid grid-cols-2 gap-3">
             {byGroup.portrait.map((slot) => (
@@ -92,18 +132,18 @@ function PhotoSlotGrid({ patient }: { patient: Patient }) {
           </div>
         </div>
 
-        {/* Right: 牙齒系列框框 — 整體 5/12 寬度、cell 自然縮小 */}
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4 space-y-4">
-          <div className="text-xs text-zinc-300 font-medium flex items-center gap-2">
+        {/* Right: 牙齒系列框框 */}
+        <div className="rounded-lg border-2 border-zinc-600 bg-zinc-950/40 p-4 space-y-4">
+          <div className="text-xs text-zinc-200 font-semibold flex items-center gap-2">
             <span className="text-base">🦷</span>
             <span>牙齒</span>
-            <span className="text-[10px] text-zinc-500">
+            <span className="text-[10px] text-zinc-500 font-normal">
               （{byGroup.xray.length + byGroup.extraoral.length + byGroup.intraoral.length}）
             </span>
           </div>
           {(['xray', 'extraoral', 'intraoral'] as PhotoSlotGroup[]).map((group) => (
             <div key={group}>
-              <div className="text-[10px] text-zinc-500 mb-1.5 font-medium">
+              <div className="text-[10px] text-zinc-400 mb-1.5 font-medium">
                 {PHOTO_GROUP_LABEL[group]}（{byGroup[group].length}）
               </div>
               <div className="grid grid-cols-2 gap-2">

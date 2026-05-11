@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.1.15 — 2026-05-07
+
+框線明顯化 + 整體尺寸可調 slider。
+
+### 變動
+
+- **框線改粗 + 亮**：`border-2 border-zinc-600`（從 `border border-zinc-800`）
+- **標題加粗、改亮色**：`text-zinc-200 font-semibold`
+- **加 尺寸 slider**（50% ~ 100%、步進 5%）：右上角拖曳調整整體 photo 區寬度
+  - 即時生效、自動存 localStorage（key `aligner-photo-size`、跨 session 沿用）
+  - 非 100% 時顯示 ⟲ reset 按鈕
+  - 整體 maxWidth 縮放、cells 等比變小、左右比例維持 7:5
+
 ## v0.1.14 — 2026-05-07
 
 左右各加框 + 牙齒照片縮小。

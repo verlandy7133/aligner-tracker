@@ -133,6 +133,28 @@ class AlignerDB extends Dexie {
             p.photos = photos;
           });
       });
+
+    // v9: 45° 拆休息/微笑兩個 slot
+    // migrate: portraitOblique45 → portraitOblique45Rest（單一 slot 默認當 rest）
+    this.version(9)
+      .stores({
+        patients: 'id, chartNo, name, status, productLine, nextVisit, orderDate, doctor, *flags',
+        orders: 'id, patientId, patientChartNo, date, doctor, progress, lab',
+        settings: 'key',
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table('patients')
+          .toCollection()
+          .modify((p: Record<string, unknown>) => {
+            const photos = (p.photos as Record<string, { filename: string }>) || {};
+            if (photos.portraitOblique45 && !photos.portraitOblique45Rest) {
+              photos.portraitOblique45Rest = photos.portraitOblique45;
+            }
+            delete photos.portraitOblique45;
+            p.photos = photos;
+          });
+      });
   }
 }
 

@@ -106,6 +106,33 @@ class AlignerDB extends Dexie {
             p.photos = migrated;
           });
       });
+
+    // v8: portrait slot 重組
+    // 移除: portraitProfileLeft, portraitProfileRight
+    // 新加: portraitOblique45, portraitProfileRest, portraitProfileSmile
+    // migrate: portraitProfileRight → portraitProfileRest（休息姿勢右側 = 標準 90° profile rest）
+    //          portraitProfileLeft → 丟掉（左側照非標準矯正 view）
+    this.version(8)
+      .stores({
+        patients: 'id, chartNo, name, status, productLine, nextVisit, orderDate, doctor, *flags',
+        orders: 'id, patientId, patientChartNo, date, doctor, progress, lab',
+        settings: 'key',
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table('patients')
+          .toCollection()
+          .modify((p: Record<string, unknown>) => {
+            const photos = (p.photos as Record<string, { filename: string }>) || {};
+            // portraitProfileRight → portraitProfileRest（如果新 key 還沒被指定）
+            if (photos.portraitProfileRight && !photos.portraitProfileRest) {
+              photos.portraitProfileRest = photos.portraitProfileRight;
+            }
+            delete photos.portraitProfileRight;
+            delete photos.portraitProfileLeft;
+            p.photos = photos;
+          });
+      });
   }
 }
 

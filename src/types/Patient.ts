@@ -21,14 +21,15 @@ export type PatientFlag =
   | 'needs-followup'
   | 'brand-switched-to-invisalign';
 
-// 病歷照片 12-slot：人像 (4) + X-ray (2) + 口外 (2) + 口內 (4)
-// 對齊一般矯正 case report：portrait + extra-oral + intra-oral series
+// 病歷照片 13-slot：人像 (5) + X-ray (2) + 口外 (2) + 口內 (4)
+// 對齊一般矯正 case report：portrait（含 oblique + profile rest/smile）+ extra-oral + intra-oral series
 export type PhotoSlot =
   // 人像（face / portrait）
-  | 'portraitFrontalRest'
-  | 'portraitFrontalSmile'
-  | 'portraitProfileRight'
-  | 'portraitProfileLeft'
+  | 'portraitFrontalRest' // 正面（休息）
+  | 'portraitFrontalSmile' // 正面（微笑）
+  | 'portraitOblique45' // 45° 斜位
+  | 'portraitProfileRest' // 90° 側面（休息）
+  | 'portraitProfileSmile' // 90° 側面（微笑）
   // X-ray
   | 'pano'
   | 'ceph'
@@ -46,8 +47,9 @@ export type PhotoSlotGroup = 'portrait' | 'xray' | 'extraoral' | 'intraoral';
 export const PHOTO_SLOTS: { key: PhotoSlot; label: string; group: PhotoSlotGroup }[] = [
   { key: 'portraitFrontalRest', label: '正面（休息）', group: 'portrait' },
   { key: 'portraitFrontalSmile', label: '正面（微笑）', group: 'portrait' },
-  { key: 'portraitProfileRight', label: '側面（右）', group: 'portrait' },
-  { key: 'portraitProfileLeft', label: '側面（左）', group: 'portrait' },
+  { key: 'portraitOblique45', label: '45° 斜位', group: 'portrait' },
+  { key: 'portraitProfileRest', label: '90° 側面（休息）', group: 'portrait' },
+  { key: 'portraitProfileSmile', label: '90° 側面（微笑）', group: 'portrait' },
   { key: 'pano', label: 'Panoramic (Pano)', group: 'xray' },
   { key: 'ceph', label: 'Cephalometric (Ceph)', group: 'xray' },
   { key: 'frontClosed', label: 'Front (Closed)', group: 'extraoral' },

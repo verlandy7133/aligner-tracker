@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.1.11 — 2026-05-07
+
+人像 slot 重組：移除「側左/側右」、加「45° 斜位 / 90° 側面（休息）/ 90° 側面（微笑）」。
+
+### 變動
+
+- **人像 group 5 個 slot**（取代 v0.1.10 的 4 個）：
+  - 正面（休息）/ 正面（微笑）
+  - **45° 斜位**（新）
+  - **90° 側面（休息）**（新、取代「側面右」）
+  - **90° 側面（微笑）**（新）
+- **移除 slot**：`portraitProfileLeft` / `portraitProfileRight`
+
+### Migration
+
+**Dexie schema 升 v8**：
+- `portraitProfileRight` → `portraitProfileRest`（自動 migrate、休息姿勢右側 = 標準 90° profile rest）
+- `portraitProfileLeft` → 丟掉（左側照非標準矯正 view）
+
 ## v0.1.10 — 2026-05-07
 
 照片編輯（旋轉 / 翻轉）+ 人像 4 框 + 照片筆記順序對調。

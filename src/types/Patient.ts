@@ -21,18 +21,33 @@ export type PatientFlag =
   | 'needs-followup'
   | 'brand-switched-to-invisalign';
 
-// 病歷照片 8-slot：對齊一般矯正 case report extra-oral + intra-oral series
+// 病歷照片 12-slot：人像 (4) + X-ray (2) + 口外 (2) + 口內 (4)
+// 對齊一般矯正 case report：portrait + extra-oral + intra-oral series
 export type PhotoSlot =
+  // 人像（face / portrait）
+  | 'portraitFrontalRest'
+  | 'portraitFrontalSmile'
+  | 'portraitProfileRight'
+  | 'portraitProfileLeft'
+  // X-ray
   | 'pano'
   | 'ceph'
+  // 口外（extra-oral）
   | 'frontClosed'
   | 'frontOpen'
+  // 口內（intra-oral）
   | 'leftClosed'
   | 'rightClosed'
   | 'upperOcclusal'
   | 'lowerOcclusal';
 
-export const PHOTO_SLOTS: { key: PhotoSlot; label: string; group: 'xray' | 'extraoral' | 'intraoral' }[] = [
+export type PhotoSlotGroup = 'portrait' | 'xray' | 'extraoral' | 'intraoral';
+
+export const PHOTO_SLOTS: { key: PhotoSlot; label: string; group: PhotoSlotGroup }[] = [
+  { key: 'portraitFrontalRest', label: '正面（休息）', group: 'portrait' },
+  { key: 'portraitFrontalSmile', label: '正面（微笑）', group: 'portrait' },
+  { key: 'portraitProfileRight', label: '側面（右）', group: 'portrait' },
+  { key: 'portraitProfileLeft', label: '側面（左）', group: 'portrait' },
   { key: 'pano', label: 'Panoramic (Pano)', group: 'xray' },
   { key: 'ceph', label: 'Cephalometric (Ceph)', group: 'xray' },
   { key: 'frontClosed', label: 'Front (Closed)', group: 'extraoral' },
@@ -42,6 +57,21 @@ export const PHOTO_SLOTS: { key: PhotoSlot; label: string; group: 'xray' | 'extr
   { key: 'upperOcclusal', label: 'Upper Occlusal', group: 'intraoral' },
   { key: 'lowerOcclusal', label: 'Lower Occlusal', group: 'intraoral' },
 ];
+
+export const PHOTO_GROUP_LABEL: Record<PhotoSlotGroup, string> = {
+  portrait: '人像',
+  xray: 'X-ray',
+  extraoral: '口外',
+  intraoral: '口內',
+};
+
+// 每張照片的編輯 metadata（旋轉、翻轉等純前端 transform、不動原檔）
+export type PhotoMeta = {
+  filename: string;
+  rotate?: 0 | 90 | 180 | 270; // 順時針度數
+  flipH?: boolean; // 水平翻轉
+  flipV?: boolean; // 垂直翻轉
+};
 
 export type Patient = {
   id: string;
@@ -75,9 +105,11 @@ export type Patient = {
   sourceFolder: string;
   allSourceFolders?: string[];
 
-  // ─── 病患筆記 + 8-slot 病歷照片（v0.1.9 新增）──────
+  // ─── 病患筆記 + 病歷照片（v0.1.9 新增 / v0.1.10 升級）──
   markdownNote: string; // 自由格式筆記、之後可接 markdown render
-  photos: Partial<Record<PhotoSlot, string>>; // slot → 相對於 sourceFolder 的檔名（例 'frontClosed.jpg'）
+  // v0.1.9: photos: Partial<Record<PhotoSlot, string>>（單純檔名）
+  // v0.1.10: 改成 PhotoMeta object 支援 rotate/flip 編輯；Dexie v7 upgrade 自動轉換
+  photos: Partial<Record<PhotoSlot, PhotoMeta>>;
 
   createdAt: string;
   updatedAt: string;

@@ -1,5 +1,40 @@
 # Changelog
 
+## v0.1.10 — 2026-05-07
+
+照片編輯（旋轉 / 翻轉）+ 人像 4 框 + 照片筆記順序對調。
+
+### 新增
+
+- **人像 4 個 slot（portrait group）**：總 slot 數 8 → 12
+  - 正面（休息）/ 正面（微笑）/ 側面（右）/ 側面（左）
+  - 按 group 分區排版：人像 → X-ray → 口外 → 口內
+- **照片簡單編輯**（純前端 CSS transform、不動原檔）
+  - 點照片右上 ✎ 開編輯 modal、即時 preview
+  - 順時針 / 逆時針 90° 旋轉、水平 / 垂直翻轉、一鍵還原
+  - 編輯設定存進 IndexedDB `PhotoMeta`、跟著 sync.json 同步到其他機
+- **「照片在上 / 筆記在下」順序對調**（v0.1.9 是反的）
+
+### 資料模型
+
+- `photos` value 從 `string`（檔名）升級成 `PhotoMeta`：`{ filename, rotate?, flipH?, flipV? }`
+- **Dexie schema 升 v7**：upgrade callback 自動把舊 string 包成 `{ filename: string }`、不需手動 migrate
+- 加 `PhotoSlotGroup` type + `PHOTO_GROUP_LABEL` map
+
+### 設計筆記
+
+- **「純前端 transform」而非「server-side 處理」**：避免動原檔、不用裝 sharp / PIL、跨機同步不用搬處理過的圖檔、只搬 metadata
+- **旋轉 90/270° 圖會被 4:3 框裁切**：暫用 `scale: 0.75` 折衷縮小、未來 v0.1.11 可改 dynamic aspect ratio
+- **更進階的編輯（crop / brightness / contrast / 標註）**留之後
+- **HEIC 顯示**：Chrome 仍有問題、未做轉檔（延到下版）
+
+### 已知問題
+
+- HEIC 在 Chrome 顯示不出來（Safari ok）
+- markdown render preview 還沒做（純 textarea）
+- PDF case report 匯出還沒做
+- AI 智能填入還沒做
+
 ## v0.1.9 — 2026-05-07
 
 病患筆記 + 8-slot 病歷照片（從病患資料夾選照片、不複製檔案）。

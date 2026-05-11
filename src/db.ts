@@ -78,6 +78,34 @@ class AlignerDB extends Dexie {
             if (p.photos == null) p.photos = {};
           });
       });
+
+    // v7: photos value 從 string（單純檔名）升級成 PhotoMeta object（支援 rotate/flip）
+    // 同時新加 portrait 4 個 slot 不需 schema 改動，只需 type 層新增
+    this.version(7)
+      .stores({
+        patients: 'id, chartNo, name, status, productLine, nextVisit, orderDate, doctor, *flags',
+        orders: 'id, patientId, patientChartNo, date, doctor, progress, lab',
+        settings: 'key',
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table('patients')
+          .toCollection()
+          .modify((p: Record<string, unknown>) => {
+            const photos = (p.photos as Record<string, unknown>) || {};
+            const migrated: Record<string, { filename: string }> = {};
+            for (const [slot, val] of Object.entries(photos)) {
+              if (typeof val === 'string') {
+                // 舊格式：直接 filename string → 包成 PhotoMeta
+                migrated[slot] = { filename: val };
+              } else if (val && typeof val === 'object' && 'filename' in val) {
+                // 已是 PhotoMeta（不應該發生、但保險）
+                migrated[slot] = val as { filename: string };
+              }
+            }
+            p.photos = migrated;
+          });
+      });
   }
 }
 

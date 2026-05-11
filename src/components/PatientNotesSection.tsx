@@ -68,27 +68,51 @@ function PhotoSlotGrid({ patient }: { patient: Patient }) {
           </span>
         </h3>
       </div>
-      <div className="space-y-4">
-        {(Object.keys(byGroup) as PhotoSlotGroup[]).map((group) => (
-          <div key={group}>
-            <div className="text-[10px] text-zinc-500 mb-1.5 font-medium">
-              {PHOTO_GROUP_LABEL[group]}（{byGroup[group].length}）
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {byGroup[group].map((slot) => (
-                <PhotoSlotCell
-                  key={slot.key}
-                  patient={patient}
-                  slotKey={slot.key}
-                  slotLabel={slot.label}
-                  meta={patient.photos?.[slot.key]}
-                  onPickClick={() => setPicker({ slot: slot.key, label: slot.label })}
-                  onEditClick={(meta) => setEditor({ slot: slot.key, label: slot.label, meta })}
-                />
-              ))}
-            </div>
+      {/* 左半：人像 (3x2 grid) | 右半：X-ray + 口外 + 口內 (各自 2 col) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left: portrait — 6 個 slot 整齊 2col × 3row */}
+        <div>
+          <div className="text-[10px] text-zinc-500 mb-1.5 font-medium">
+            {PHOTO_GROUP_LABEL.portrait}（{byGroup.portrait.length}）
           </div>
-        ))}
+          <div className="grid grid-cols-2 gap-3">
+            {byGroup.portrait.map((slot) => (
+              <PhotoSlotCell
+                key={slot.key}
+                patient={patient}
+                slotKey={slot.key}
+                slotLabel={slot.label}
+                meta={patient.photos?.[slot.key]}
+                onPickClick={() => setPicker({ slot: slot.key, label: slot.label })}
+                onEditClick={(meta) => setEditor({ slot: slot.key, label: slot.label, meta })}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Right: 牙齒系列 — xray + 口外 + 口內 垂直堆疊 */}
+        <div className="space-y-4">
+          {(['xray', 'extraoral', 'intraoral'] as PhotoSlotGroup[]).map((group) => (
+            <div key={group}>
+              <div className="text-[10px] text-zinc-500 mb-1.5 font-medium">
+                {PHOTO_GROUP_LABEL[group]}（{byGroup[group].length}）
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {byGroup[group].map((slot) => (
+                  <PhotoSlotCell
+                    key={slot.key}
+                    patient={patient}
+                    slotKey={slot.key}
+                    slotLabel={slot.label}
+                    meta={patient.photos?.[slot.key]}
+                    onPickClick={() => setPicker({ slot: slot.key, label: slot.label })}
+                    onEditClick={(meta) => setEditor({ slot: slot.key, label: slot.label, meta })}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
       {picker && (
         <PhotoPickerModal

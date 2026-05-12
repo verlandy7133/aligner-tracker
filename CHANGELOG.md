@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.3.11 — 2026-05-13
+
+v0.3.10 修正：拉寬的是「**照片本身**」、不是「**cell 框**」。
+
+### 變動
+
+- **PhotoMeta 加 `imageStretchX`**（0.5 ~ 2.5、預設 1.0）→ 控制 img 水平 scaleX
+- `aspectRatio` 標記 deprecated（仍保留欄位避免舊資料炸、但不再使用）
+- **cell 回 `aspect-[4/3]` 預設**（之前 v0.3.10 改 inline aspectRatio）
+- **Editor modal slider 改名「寬高比」→「照片寬度」**
+  - 範圍 50% ~ 250%、控制 `imageStretchX` 而非 cell aspect
+  - cell 大小不變、img 水平拉伸；超出 cell 邊界被 overflow:hidden 裁切
+  - 旋轉 90° + 拉寬 → 牙齒被擠在直立 cell 內、拉寬後撐滿視覺寬度
+- 移除 4:3/3:4/16:9/1:1 preset（不再控制 cell aspect）
+- 「⟲ 還原」按鈕改 disabled 條件依 imageStretchX
+
+### 使用
+
+旋轉 90° 後牙齒變直立（_MG_5322 右側咬合照那種）：
+- 之前：img 被擠在 4:3 cell 內、上下大量黑邊 / 裁切
+- 現在：拉「照片寬度」slider → img 水平 scaleX 拉伸、視覺撐滿 cell（會有 cropping 但牙齒主體看得更清楚）
+
 ## v0.3.10 — 2026-05-13
 
 每張照片 cell 寬高比可獨立調 — 旋轉 90° / 翻轉後想拉寬時直接 slider 改。

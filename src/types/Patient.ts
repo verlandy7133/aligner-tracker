@@ -75,11 +75,14 @@ export type PhotoMeta = {
   rotate?: 0 | 90 | 180 | 270; // 順時針度數
   flipH?: boolean; // 水平翻轉
   flipV?: boolean; // 垂直翻轉
-  displayScale?: number; // 0.5 ~ 2.0，預設 1.0 — 該 cell 內部 img 的視覺縮放
+  displayScale?: number; // 0.5 ~ 2.0，預設 1.0 — 該 cell 內部 img 的視覺縮放（等比）
+  imageStretchX?: number; // 0.5 ~ 2.5，預設 1.0 — img 水平拉寬倍數（旋轉 90° 後拉寬用）
   brightness?: number; // 0.5 ~ 1.5，預設 1.0 — CSS filter brightness（1.0 = 原圖）
-  aspectRatio?: number; // 0.5 ~ 2.5，預設 4/3 ≈ 1.333 — cell 的寬/高比（旋轉/翻轉後想拉寬時調）
+  /** @deprecated v0.3.10 加、v0.3.11 拋棄，改用 imageStretchX。保留欄位避免舊資料炸 */
+  aspectRatio?: number;
 };
 
+// cell 固定 4:3 預設、不再讓 user 直接改 cell 比例（user 反饋是要拉「照片」不是「框」）
 export const DEFAULT_ASPECT_RATIO = 4 / 3;
 
 export type Patient = {

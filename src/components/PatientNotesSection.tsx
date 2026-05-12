@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../db';
 import type { Patient, PhotoMeta, PhotoSlot, PhotoSlotGroup } from '../types/Patient';
-import { PHOTO_SLOTS, PHOTO_GROUP_LABEL, DEFAULT_ASPECT_RATIO } from '../types/Patient';
+import { PHOTO_SLOTS, PHOTO_GROUP_LABEL } from '../types/Patient';
 import {
   listFolderFiles,
   getImageUrl,
@@ -443,10 +443,13 @@ function PhotoSlotGrid({ patient }: { patient: Patient }) {
 function buildPhotoTransform(meta: PhotoMeta | undefined): string {
   if (!meta) return '';
   const parts: string[] = [];
+  // 順序：rotate → flipH → flipV → displayScale (等比) → imageStretchX (水平拉伸)
+  // CSS transform 從右到左 apply、但對視覺體驗影響不大
   if (meta.rotate) parts.push(`rotate(${meta.rotate}deg)`);
   if (meta.flipH) parts.push('scaleX(-1)');
   if (meta.flipV) parts.push('scaleY(-1)');
   if (meta.displayScale && meta.displayScale !== 1) parts.push(`scale(${meta.displayScale})`);
+  if (meta.imageStretchX && meta.imageStretchX !== 1) parts.push(`scaleX(${meta.imageStretchX})`);
   return parts.join(' ');
 }
 
@@ -571,15 +574,13 @@ function PhotoSlotCell({
     ? { boxShadow: '0 0 0 3px rgb(56 189 248 / 0.6), 0 0 16px rgb(56 189 248 / 0.4)' }
     : {};
 
-  const aspectRatio = meta?.aspectRatio ?? DEFAULT_ASPECT_RATIO;
-
   if (!imageUrl || !meta) {
     // readOnly mode：空 slot 顯示「—」、不能點選
     if (READ_ONLY) {
       return (
         <div
-          style={{ ...PHOTO_BORDER_STYLE, borderStyle: 'dashed', aspectRatio: String(DEFAULT_ASPECT_RATIO) }}
-          className="rounded-md bg-zinc-950/40 flex flex-col items-center justify-center gap-1 text-zinc-600"
+          style={{ ...PHOTO_BORDER_STYLE, borderStyle: 'dashed' }}
+          className="aspect-[4/3] rounded-md bg-zinc-950/40 flex flex-col items-center justify-center gap-1 text-zinc-600"
         >
           <span className="text-[11px] text-center px-2">{slotLabel}</span>
           <span className="text-[10px]">—</span>
@@ -592,8 +593,8 @@ function PhotoSlotCell({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        style={{ ...PHOTO_BORDER_STYLE, borderStyle: 'dashed', aspectRatio: String(DEFAULT_ASPECT_RATIO), ...dragOverRing }}
-        className={`rounded-md bg-zinc-950/40 hover:bg-sky-500/5 transition flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-sky-400 group ${
+        style={{ ...PHOTO_BORDER_STYLE, borderStyle: 'dashed', ...dragOverRing }}
+        className={`aspect-[4/3] rounded-md bg-zinc-950/40 hover:bg-sky-500/5 transition flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-sky-400 group ${
           isDragOver ? 'bg-sky-500/10' : ''
         }`}
       >
@@ -605,10 +606,10 @@ function PhotoSlotCell({
 
   return (
     <div
-      className={`relative rounded-md overflow-hidden bg-zinc-950 group ${
+      className={`relative aspect-[4/3] rounded-md overflow-hidden bg-zinc-950 group ${
         !READ_ONLY ? 'cursor-move' : ''
       }`}
-      style={{ ...PHOTO_BORDER_STYLE, aspectRatio: String(aspectRatio), ...dragOverRing }}
+      style={{ ...PHOTO_BORDER_STYLE, ...dragOverRing }}
       draggable={!READ_ONLY}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
@@ -700,8 +701,8 @@ function PhotoEditorModal({
   function setBrightness(b: number) {
     setMeta({ ...meta, brightness: b });
   }
-  function setAspectRatio(r: number) {
-    setMeta({ ...meta, aspectRatio: r });
+  function setImageStretchX(s: number) {
+    setMeta({ ...meta, imageStretchX: s });
   }
   function reset() {
     setMeta({ filename: meta.filename }); // 清掉所有 transform
@@ -721,11 +722,11 @@ function PhotoEditorModal({
     meta.flipV !== initialMeta.flipV ||
     (meta.displayScale ?? 1) !== (initialMeta.displayScale ?? 1) ||
     (meta.brightness ?? 1) !== (initialMeta.brightness ?? 1) ||
-    (meta.aspectRatio ?? DEFAULT_ASPECT_RATIO) !== (initialMeta.aspectRatio ?? DEFAULT_ASPECT_RATIO);
+    (meta.imageStretchX ?? 1) !== (initialMeta.imageStretchX ?? 1);
 
   const currentScale = meta.displayScale ?? 1;
   const currentBrightness = meta.brightness ?? 1;
-  const currentAspect = meta.aspectRatio ?? DEFAULT_ASPECT_RATIO;
+  const currentStretchX = meta.imageStretchX ?? 1;
 
   return (
     <div
@@ -803,7 +804,7 @@ function PhotoEditorModal({
                 !meta.flipV &&
                 currentScale === 1 &&
                 currentBrightness === 1 &&
-                currentAspect === DEFAULT_ASPECT_RATIO
+                currentStretchX === 1
               }
               className="px-3 py-2 rounded-md text-sm border border-zinc-700 text-zinc-400 hover:bg-zinc-800 transition disabled:opacity-40"
               title="清掉所有編輯"
@@ -835,52 +836,31 @@ function PhotoEditorModal({
               </button>
             )}
           </div>
-          {/* 寬高比 slider — 0.5 ~ 2.5（cell width / height）*/}
+          {/* 照片寬度 slider — 0.5 ~ 2.5、控制 img scaleX（cell 不動）*/}
           <div className="mt-2 flex items-center gap-3 px-1">
-            <span className="text-xs text-zinc-400 font-medium w-12">寬高比</span>
+            <span className="text-xs text-zinc-400 font-medium w-12">照片寬度</span>
             <input
               type="range"
               min={0.5}
               max={2.5}
               step={0.05}
-              value={currentAspect}
-              onChange={(e) => setAspectRatio(Number(e.target.value))}
+              value={currentStretchX}
+              onChange={(e) => setImageStretchX(Number(e.target.value))}
               className="flex-1 accent-cyan-500"
-              title="cell 寬/高比例（旋轉 90° 後想拉寬時調）"
+              title="img 水平 scaleX（旋轉 90° 後牙齒變直立、拉寬讓視覺撐滿）"
             />
             <span className="tabular text-xs text-zinc-300 w-16 text-right">
-              {currentAspect.toFixed(2)}
+              {Math.round(currentStretchX * 100)}%
             </span>
-            <div className="flex gap-0.5">
+            {currentStretchX !== 1 && (
               <button
-                onClick={() => setAspectRatio(DEFAULT_ASPECT_RATIO)}
+                onClick={() => setImageStretchX(1)}
                 className="text-[10px] text-zinc-500 hover:text-zinc-200 px-1.5 py-0.5 rounded hover:bg-zinc-800 transition"
-                title="4:3"
+                title="重設 100%"
               >
-                4:3
+                ⟲
               </button>
-              <button
-                onClick={() => setAspectRatio(3 / 4)}
-                className="text-[10px] text-zinc-500 hover:text-zinc-200 px-1.5 py-0.5 rounded hover:bg-zinc-800 transition"
-                title="3:4"
-              >
-                3:4
-              </button>
-              <button
-                onClick={() => setAspectRatio(16 / 9)}
-                className="text-[10px] text-zinc-500 hover:text-zinc-200 px-1.5 py-0.5 rounded hover:bg-zinc-800 transition"
-                title="16:9"
-              >
-                16:9
-              </button>
-              <button
-                onClick={() => setAspectRatio(1)}
-                className="text-[10px] text-zinc-500 hover:text-zinc-200 px-1.5 py-0.5 rounded hover:bg-zinc-800 transition"
-                title="1:1"
-              >
-                1:1
-              </button>
-            </div>
+            )}
           </div>
           {/* 亮度 slider — 0.5 ~ 1.5（CSS filter brightness）*/}
           <div className="mt-2 flex items-center gap-3 px-1">

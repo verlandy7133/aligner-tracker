@@ -14,6 +14,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import sharp from 'sharp';
 
 const PORT = 8765;
 // 自動偵測安裝碟：優先 D 槽（vrlndy 主機慣例），否則用系統碟（C: 通常）
@@ -711,35 +712,40 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        // 2. Read + base64 encode（Claude API max ~20 image / call、超過要分批；先簡單版單批）
+        // 2. Read + 用 sharp resize 到 1024px max + JPEG 質量 75% + base64
+        // 原圖通常 2-5MB、resize 後 ~50-200KB、避免超過 Anthropic 32MB request limit
+        // 也順便支援 PNG / WEBP 統一轉 JPEG（Claude vision 都吃）
         const MAX_IMAGES = 20;
         const batchImages = allImages.slice(0, MAX_IMAGES);
         const content = [];
         for (let i = 0; i < batchImages.length; i++) {
           const filename = batchImages[i];
-          const buf = fs.readFileSync(path.join(remapped, filename));
-          const ext = path.extname(filename).slice(1).toLowerCase();
-          const mediaType =
-            ext === 'jpg' || ext === 'jpeg'
-              ? 'image/jpeg'
-              : ext === 'png'
-                ? 'image/png'
-                : ext === 'webp'
-                  ? 'image/webp'
-                  : 'image/jpeg';
-          content.push({
-            type: 'text',
-            text: `Photo #${i + 1}: ${filename}`,
-          });
-          content.push({
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: mediaType,
-              data: buf.toString('base64'),
-            },
-          });
+          try {
+            const resized = await sharp(path.join(remapped, filename))
+              .resize({
+                width: 1024,
+                height: 1024,
+                fit: 'inside',
+                withoutEnlargement: true,
+              })
+              .jpeg({ quality: 75 })
+              .toBuffer();
+            content.push({ type: 'text', text: `Photo #${i + 1}: ${filename}` });
+            content.push({
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'image/jpeg',
+                data: resized.toString('base64'),
+              },
+            });
+          } catch (e) {
+            console.warn(`[classify-photos] skip ${filename}: ${e.message}`);
+          }
         }
+        console.log(
+          `[classify-photos] prepared ${(content.length - batchImages.length) / 1} images for Claude (after resize)`,
+        );
 
         // 3. Prompt：詳細列 14 個 slot 定義、要 Claude 返回 raw JSON array
         const systemPrompt = `You are analyzing dental orthodontic patient photos to classify each into one of 14 standard slots.
@@ -784,8 +790,9 @@ Rules:
         ];
 
         // 4. Anthropic API call
+        // 用 alias model name（無 date suffix）— Anthropic 自動 redirect 到最新版
         const apiBody = {
-          model: 'claude-haiku-4-5-20251024',
+          model: 'claude-haiku-4-5',
           max_tokens: 4000,
           system: systemPrompt,
           messages,

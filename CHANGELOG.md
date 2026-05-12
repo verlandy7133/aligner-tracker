@@ -1,5 +1,45 @@
 # Changelog
 
+## v0.3.3 — 2026-05-13
+
+sync.json 內 path 自動 normalize — 跨機 dataRoot 不一致也能 work。
+
+### 場景
+
+D 開發機在外網、想直連 NAS 但 SMB 445 通常被擋。退路 = Drive Client mirror（本機路徑 `D:\診所nas 0矯正追蹤\SynologyDrive`）。跟筆電 master 機（W:\0矯正追蹤）dataRoot 不同。
+
+之前 sync.json 內 `sourceFolder` 是 absolute path（W:\...）、D 機 pull 後 IndexedDB 內仍是 W:\、開檔找不到。
+
+### 新增
+
+- **`src/lib/path-normalize.ts`** — normalize / denormalize utility
+  - `normalizePath(abs, dataRoot)` 把 `W:\0矯正追蹤\病患資料夾\xxx` strip 成 `病患資料夾\xxx`
+  - `denormalizePath(rel, dataRoot)` 把 `病患資料夾\xxx` + 本機 dataRoot prepend 回 absolute
+  - `normalizePatient` / `denormalizePatient` 處理整個 patient 內 sourceFolder + consentPdfPath
+- **`backup.ts` 升 v2**：
+  - `exportBackup(dataRoot?)` 有給 dataRoot → patients 內 path 自動 normalize
+  - `importBackup(file, dataRoot?)` 新 file (v2) + 給 dataRoot → 自動 denormalize
+  - 標記 `BackupFile.dataRoot` 紀錄 sender 來源（debug）
+- **SyncSection doPush / doPullConfirm**：抓 helper `/paths` 拿本機 dataRoot 傳給 export/import
+- **UpdateSection 切版前自動 backup** 也用 normalize（之後從 backup 還原跨機 OK）
+- **BackupSection 本機下載 backup** 維持 v1（無 normalize、user 本機 reimport 用）
+
+### 影響
+
+| 場景 | v0.3.3 行為 |
+|:--|:--|
+| 同機 push + 同機 pull | path 還原成本機 absolute、行為跟之前一樣 |
+| 機 A 推 (dataRoot W:\) + 機 B 拉 (dataRoot D:\) | B 拉下來自動 prepend D:\、開檔 work ✓ |
+| 拉舊 v1 backup | dataRoot 給也不 denormalize（file.version < 2）、保留 absolute |
+| 本機下載備份檔 | 仍 v1、absolute path、跟之前一樣 |
+
+### 升級流程
+
+1. 筆電升 v0.3.3 → ⚙ 設定 → 跨機同步 → 「📤 推到 NAS」（這次推上去的是 v2 format）
+2. D 機升 v0.3.3 → 設定 dataRoot 為本機 mirror 路徑（例 `D:\診所nas 0矯正追蹤\SynologyDrive`）→ 「📥 從 NAS 拉」（自動 denormalize）
+
+跨機就一致了、不再需要每次切機跑「路徑遷移」工具（之前 v0.3.2 的）。
+
 ## v0.3.2 — 2026-05-12
 
 路徑遷移工具：dataRoot 改動後、批次改寫 IndexedDB 內舊 sourceFolder / consentPdfPath。

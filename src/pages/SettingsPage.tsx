@@ -421,7 +421,9 @@ function UpdateSection() {
     setPhase('backing-up');
     let savedBackupPath = '';
     try {
-      const backup = await exportBackup();
+      // v0.3.3+：用 dataRoot normalize、之後跨機還原 OK
+      const dataRoot = await fetchDataRoot();
+      const backup = await exportBackup(dataRoot);
       const json = JSON.stringify(backup, null, 2);
       const fromVer = currentTag || (currentHash ? currentHash.slice(0, 7) : 'unknown');
       const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -882,6 +884,18 @@ function PathMigrationSection() {
 
 /* ─── 跨機同步（推 / 拉 NAS sync.json）─────────────────── */
 const SYNC_LAST_PUSHED_KEY = 'aligner-sync-last-pushed';
+
+// v0.3.3+: 抓本機 dataRoot 給 normalize path 用
+async function fetchDataRoot(): Promise<string> {
+  try {
+    const resp = await fetch('http://127.0.0.1:8765/paths');
+    if (!resp.ok) return '';
+    const data = (await resp.json()) as { dataRoot: string };
+    return data.dataRoot || '';
+  } catch {
+    return '';
+  }
+}
 const SYNC_LAST_PULLED_KEY = 'aligner-sync-last-pulled';
 
 function SyncSection() {
@@ -931,7 +945,10 @@ function SyncSection() {
     setBusy('pushing');
     setMsg(null);
     try {
-      const backup = await exportBackup();
+      // v0.3.3+：抓本機 dataRoot 傳給 exportBackup、normalize path 成 relative
+      // 跨機 sync 就不會因為 dataRoot 不同（W:\ vs D:\）path 不通
+      const dataRoot = await fetchDataRoot();
+      const backup = await exportBackup(dataRoot);
       const json = JSON.stringify(backup, null, 2);
       const r = await syncWrite(json);
       if (r.state === 'ok') {
@@ -999,7 +1016,10 @@ function SyncSection() {
         setBusy('idle');
         return;
       }
-      await importBackup(validation.file);
+      // v0.3.3+：傳本機 dataRoot 給 importBackup、把 sync.json 內 relative path
+      // 還原成本機 absolute path（跨機 dataRoot 不同也能 work）
+      const dataRoot = await fetchDataRoot();
+      await importBackup(validation.file, dataRoot);
       localStorage.setItem(SYNC_LAST_PULLED_KEY, new Date().toISOString());
       setMsg({ type: 'ok', text: '✓ 已從 NAS 拉並還原。重整頁面套用…' });
       setPendingPull(null);

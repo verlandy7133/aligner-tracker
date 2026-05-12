@@ -13,6 +13,9 @@ import {
   PRODUCT_LINE_LABEL,
   FLAG_LABEL,
 } from '../labels';
+import PatientNotesSection from './PatientNotesSection';
+
+type Tab = 'basic' | 'photos';
 
 type Mode = 'new' | 'edit';
 
@@ -103,9 +106,15 @@ export default function PatientFormModal({ target, prefillName, onClose }: Patie
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [activeTab, setActiveTab] = useState<Tab>('basic');
   const doctors = useDoctors();
   const [openState, setOpenState] = useState<'idle' | 'opening' | 'opened' | 'helper-down' | 'error'>('idle');
   const [openError, setOpenError] = useState('');
+
+  // 開新 modal 時 reset 到 basic tab
+  useEffect(() => {
+    if (target) setActiveTab('basic');
+  }, [target]);
 
   const sourceFolder =
     target && target !== 'new' ? target.sourceFolder : '';
@@ -348,7 +357,7 @@ export default function PatientFormModal({ target, prefillName, onClose }: Patie
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl my-8">
+      <div className="w-full max-w-6xl bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl my-8">
         <header className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-zinc-100">
             {mode === 'new' ? '新增病患' : `編輯病患 · ${(target as Patient).name}`}
@@ -362,7 +371,45 @@ export default function PatientFormModal({ target, prefillName, onClose }: Patie
           </button>
         </header>
 
-        <div className="px-6 py-5 space-y-6">
+        {/* Tab nav — only show in edit mode（new 模式下還沒有 patient.id、不能存照片）*/}
+        {mode === 'edit' && target !== 'new' && target !== null && (
+          <div className="px-6 pt-3 border-b border-zinc-800 flex gap-1">
+            <button
+              onClick={() => setActiveTab('basic')}
+              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition ${
+                activeTab === 'basic'
+                  ? 'border-sky-500 text-sky-300'
+                  : 'border-transparent text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              基本資料
+            </button>
+            <button
+              onClick={() => setActiveTab('photos')}
+              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition ${
+                activeTab === 'photos'
+                  ? 'border-sky-500 text-sky-300'
+                  : 'border-transparent text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              📋 病歷照片 / 筆記
+            </button>
+          </div>
+        )}
+
+        {/* photos tab content */}
+        {activeTab === 'photos' && mode === 'edit' && target !== 'new' && target !== null && (
+          <div className="px-6 py-5">
+            <PatientNotesSection patient={target} />
+            <p className="text-[11px] text-zinc-500 mt-4 px-1">
+              照片區的變動會即時儲存（slot 連結 / 旋轉 / 翻轉 / 縮放 / 亮度 / 筆記）— 不依賴下方「儲存」按鈕。
+              「儲存」按鈕只關到上方「基本資料」tab 的表單欄位。
+            </p>
+          </div>
+        )}
+
+        {/* basic tab content (default form) */}
+        <div className={`px-6 py-5 space-y-6 ${activeTab === 'photos' ? 'hidden' : ''}`}>
           <Section title="基本資料">
             <Field label="病歷號" required>
               <input

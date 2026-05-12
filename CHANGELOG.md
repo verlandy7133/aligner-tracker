@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.3.4 — 2026-05-13
+
+照片區從詳細頁底下搬進「✎ 編輯」modal 內、做成 tab。
+
+### 變動
+
+- **PatientFormModal**：
+  - max-width `max-w-2xl` → `max-w-6xl`（容納 8-slot 大圖）
+  - 加 tab navigation：「基本資料」/「📋 病歷照片 / 筆記」
+  - 「病歷照片」tab 嵌入 PatientNotesSection（重用既有 component）
+  - 加 hint 文字：「照片區即時儲存、基本資料按下方儲存才生效」（兩種 saving 機制差異說明）
+  - new 模式（沒 patient.id）不顯示 photos tab
+- **PatientDetailPage**：
+  - master mode：詳細頁底下不再顯示 PatientNotesSection（避免兩處 entry confused）
+  - readOnly mode：仍顯示（iPad 看用）
+
+### 為什麼
+
+user 反饋「inline 邊改邊存、不知道哪些對哪些不對」 — 改成「進編輯 modal、tab 集中編輯」雖然照片仍 auto-save、但 entry 集中、看得到完整 8-slot grid review。
+
+### 已知 trade-off
+
+- 照片 auto-save + form staged 兩種 saving 混合 — 加 hint 註解、但仍存在
+- 未來想徹底「review + commit」儀式感、需要把 photo 改動也 staged（schema 重構、暫不做）
+
 ## v0.3.3 — 2026-05-13
 
 sync.json 內 path 自動 normalize — 跨機 dataRoot 不一致也能 work。

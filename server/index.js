@@ -260,10 +260,12 @@ function stripMasterPrefix(p) {
   if (!p) return '';
   const PREFIXES = [
     /^W:\\矯正追蹤\\/i,
+    /^W:\\0矯正追蹤\\/i,
     /^W:\\/i,
     /^D:\\矯正\\/i,
     /^D:\\/i,
     /^\/n歐耐恩n\/矯正追蹤\//,
+    /^\/n歐耐恩n\/0矯正追蹤\//,
     /^\/data\//,
   ];
   for (const re of PREFIXES) {

@@ -6,8 +6,8 @@
 
 - ✅ NAS = Synology DS918+ DSM 6.2.2 + Docker 套件已裝
 - ✅ NAS 內網 IP = 192.168.0.220、外網 IP = 122.116.147.128:5058
-- ✅ `n歐耐恩n/矯正追蹤/` 共用資料夾已建（File Station 確認）
-- ⏳ 診所 master 機已用 App「📤 推到 NAS」推 sync.json 進 `矯正追蹤/`
+- ✅ `n歐耐恩n/0矯正追蹤/` 共用資料夾已建（File Station 確認）
+- ⏳ 診所 master 機已用 App「📤 推到 NAS」推 sync.json 進 `0矯正追蹤/`
   - 如果還沒推、deploy 後也能跑、只是 SPA 顯示「⚠️ 還沒有資料」提示頁
 - ⏳ 開發機有 Docker Desktop（或在 NAS 上 build）
 
@@ -37,7 +37,7 @@ docker save aligner-viewer:0.3.0 -o aligner-viewer-0.3.0.tar
 
 ### Step 3: 上傳 tar 到 NAS
 
-- 開 File Station → `n歐耐恩n/矯正追蹤/` 或別的位置
+- 開 File Station → `n歐耐恩n/0矯正追蹤/` 或別的位置
 - 上傳 `aligner-viewer-0.3.0.tar`
 - 或用 Synology Drive Client 同步上去也行
 
@@ -57,7 +57,7 @@ docker save aligner-viewer:0.3.0 -o aligner-viewer-0.3.0.tar
    - **進階設定** → **連接埠**：
      - 本機連接埠 `8080` → 容器連接埠 `8080`
    - **進階設定** → **共用資料夾**：
-     - 加入：`n歐耐恩n/矯正追蹤` → 掛載路徑 `/data` → **勾「唯讀」**
+     - 加入：`n歐耐恩n/0矯正追蹤` → 掛載路徑 `/data` → **勾「唯讀」**
    - **進階設定** → **環境變數**（通常 Dockerfile 已設好、可不動）：
      - `PORT=8080`
      - `DATA_PATH=/data`
@@ -108,7 +108,7 @@ DSM 6.2 Docker 套件**沒有**內建「從 Dockerfile build」UI、要透過 SS
 ssh admin@192.168.0.220 -p 22
 
 # 2. 把 source code clone 到 NAS shared folder
-cd /volume1/n歐耐恩n/矯正追蹤
+cd /volume1/n歐耐恩n/0矯正追蹤
 git clone https://github.com/verlandy7133/aligner-tracker.git
 
 # 3. NAS 上 build（需要先確認 docker CLI 在 PATH）
@@ -120,7 +120,7 @@ sudo docker run -d \
   --name aligner-viewer \
   --restart unless-stopped \
   -p 8080:8080 \
-  -v /volume1/n歐耐恩n/矯正追蹤:/data:ro \
+  -v /volume1/n歐耐恩n/0矯正追蹤:/data:ro \
   -e PORT=8080 \
   -e DATA_PATH=/data \
   aligner-viewer:0.3.0

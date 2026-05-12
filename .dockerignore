@@ -10,11 +10,15 @@ dist
 *.tar
 *.tar.gz
 
-# 個資資料夾
-dev-data/
+# 個資資料夾（病患資料夾等實體檔）
 **/病患資料夾/
 **/病患授權書/
 **/下單Excel/
+
+# dev-data/ 內含 seed JSON、builder 階段要編譯、所以不排除
+# runtime stage 只 COPY dist + server、dev-data 不會進 final image
+# 但 dev-data/* 內可能有個資、要意識到 builder layer 是 ephemeral
+# 若擔心、build 完跑：docker image prune -f --filter "label=stage=builder"
 
 # Build artifacts
 build/

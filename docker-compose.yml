@@ -13,7 +13,7 @@
 #      - 一般設定 → 容器名稱 aligner-viewer、勾「啟用自動重新啟動」
 #      - 進階設定 → 環境變數：PORT=8080, DATA_PATH=/data
 #      - 進階設定 → 連接埠：本機 8080 → 容器 8080
-#      - 進階設定 → 共用資料夾：n歐耐恩n/矯正追蹤 → 容器 /data (只讀)
+#      - 進階設定 → 共用資料夾：n歐耐恩n/0矯正追蹤 → 容器 /data (只讀)
 
 services:
   aligner-viewer:
@@ -23,8 +23,9 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      # NAS 上 n歐耐恩n share 的「矯正追蹤」子資料夾、唯讀
-      - /volume1/n歐耐恩n/矯正追蹤:/data:ro
+      # NAS 上 n歐耐恩n share 的「0矯正追蹤」子資料夾、唯讀
+      # （v0.3.0 後改名加 0 前綴讓它排前面）
+      - /volume1/n歐耐恩n/0矯正追蹤:/data:ro
     environment:
       - PORT=8080
       - DATA_PATH=/data

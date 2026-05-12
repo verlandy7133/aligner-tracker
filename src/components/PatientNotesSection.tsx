@@ -15,6 +15,7 @@ import type { Patient, PhotoMeta, PhotoSlot, PhotoSlotGroup } from '../types/Pat
 import { PHOTO_SLOTS, PHOTO_GROUP_LABEL } from '../types/Patient';
 import { listFolderFiles, getImageUrl } from '../lib/helper-client';
 import { PHOTO_BORDER_STYLE } from '../lib/photo-style';
+import { READ_ONLY } from '../lib/read-only';
 
 export default function PatientNotesSection({ patient }: { patient: Patient }) {
   return (
@@ -265,6 +266,18 @@ function PhotoSlotCell({
   }
 
   if (!imageUrl || !meta) {
+    // readOnly mode：空 slot 顯示「—」、不能點選
+    if (READ_ONLY) {
+      return (
+        <div
+          style={{ ...PHOTO_BORDER_STYLE, borderStyle: 'dashed' }}
+          className="aspect-[4/3] rounded-md bg-zinc-950/40 flex flex-col items-center justify-center gap-1 text-zinc-600"
+        >
+          <span className="text-[11px] text-center px-2">{slotLabel}</span>
+          <span className="text-[10px]">—</span>
+        </div>
+      );
+    }
     return (
       <button
         onClick={onPickClick}
@@ -300,29 +313,32 @@ function PhotoSlotCell({
         <div className="text-[10px] text-white font-medium">{slotLabel}</div>
         <div className="text-[9px] text-white/60 truncate font-mono">{meta.filename}</div>
       </div>
-      <div className="absolute inset-x-0 top-0 px-1 py-1 flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition">
-        <button
-          onClick={() => onEditClick(meta)}
-          title="編輯（旋轉 / 翻轉）"
-          className="px-1.5 py-0.5 text-[10px] rounded bg-violet-900/90 text-violet-200 hover:bg-violet-800 border border-violet-700"
-        >
-          ✎
-        </button>
-        <button
-          onClick={onPickClick}
-          title="換照片"
-          className="px-1.5 py-0.5 text-[10px] rounded bg-zinc-900/90 text-zinc-200 hover:bg-zinc-800 border border-zinc-700"
-        >
-          換
-        </button>
-        <button
-          onClick={removePhoto}
-          title="移除"
-          className="px-1.5 py-0.5 text-[10px] rounded bg-rose-900/80 text-rose-200 hover:bg-rose-800 border border-rose-700"
-        >
-          ✗
-        </button>
-      </div>
+      {/* readOnly mode 隱藏 hover actions（編輯/換/移除）*/}
+      {!READ_ONLY && (
+        <div className="absolute inset-x-0 top-0 px-1 py-1 flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition">
+          <button
+            onClick={() => onEditClick(meta)}
+            title="編輯（旋轉 / 翻轉）"
+            className="px-1.5 py-0.5 text-[10px] rounded bg-violet-900/90 text-violet-200 hover:bg-violet-800 border border-violet-700"
+          >
+            ✎
+          </button>
+          <button
+            onClick={onPickClick}
+            title="換照片"
+            className="px-1.5 py-0.5 text-[10px] rounded bg-zinc-900/90 text-zinc-200 hover:bg-zinc-800 border border-zinc-700"
+          >
+            換
+          </button>
+          <button
+            onClick={removePhoto}
+            title="移除"
+            className="px-1.5 py-0.5 text-[10px] rounded bg-rose-900/80 text-rose-200 hover:bg-rose-800 border border-rose-700"
+          >
+            ✗
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -715,13 +731,18 @@ function MarkdownNoteEditor({ patient }: { patient: Patient }) {
       <textarea
         value={value}
         onChange={handleChange}
-        placeholder={`矯正計畫、治療目標、注意事項…\n\n範例：\n# 治療目標\n1. 改善下顎門牙內傾\n2. 改善後牙咬合空間\n3. 上顎關縫\n4. 改善下巴前凸`}
-        className="w-full min-h-[200px] px-3 py-2 rounded-md bg-zinc-950/60 border border-zinc-800 text-sm text-zinc-200 font-mono leading-relaxed focus:outline-none focus:border-sky-500/50 resize-y"
+        readOnly={READ_ONLY}
+        placeholder={READ_ONLY ? '（無筆記）' : `矯正計畫、治療目標、注意事項…\n\n範例：\n# 治療目標\n1. 改善下顎門牙內傾\n2. 改善後牙咬合空間\n3. 上顎關縫\n4. 改善下巴前凸`}
+        className={`w-full min-h-[200px] px-3 py-2 rounded-md bg-zinc-950/60 border border-zinc-800 text-sm text-zinc-200 font-mono leading-relaxed focus:outline-none resize-y ${
+          READ_ONLY ? 'cursor-default' : 'focus:border-sky-500/50'
+        }`}
         spellCheck={false}
       />
-      <p className="text-[10px] text-zinc-600 mt-1">
-        自動儲存（停止輸入 0.5 秒）· 支援 markdown 格式（# 標題、- 列表、**粗體**）
-      </p>
+      {!READ_ONLY && (
+        <p className="text-[10px] text-zinc-600 mt-1">
+          自動儲存（停止輸入 0.5 秒）· 支援 markdown 格式（# 標題、- 列表、**粗體**）
+        </p>
+      )}
     </div>
   );
 }

@@ -54,6 +54,7 @@ import {
   MAX_BORDER_WIDTH,
   PHOTO_COLOR_PRESETS,
 } from '../lib/photo-style';
+import { READ_ONLY } from '../lib/read-only';
 
 export default function SettingsPage() {
   return (
@@ -67,18 +68,23 @@ export default function SettingsPage() {
 
       <UiScaleSection />
       <PhotoStyleSection />
-      <UpdateSection />
-      <PathsSection />
-      <SyncSection />
-      <LabSection />
-      <DoctorSection />
-      <AlertSection />
-      <BackupSection />
-      <RescanSection />
-      <ScanExcelSection />
-      <ReapplyExcelSection />
-      <BirthdayBackfillSection />
-      <DbSection />
+      {/* 以下 mutation section 在 readOnly mode 全隱藏（iPad 端只留視覺偏好）*/}
+      {!READ_ONLY && (
+        <>
+          <UpdateSection />
+          <PathsSection />
+          <SyncSection />
+          <LabSection />
+          <DoctorSection />
+          <AlertSection />
+          <BackupSection />
+          <RescanSection />
+          <ScanExcelSection />
+          <ReapplyExcelSection />
+          <BirthdayBackfillSection />
+          <DbSection />
+        </>
+      )}
     </div>
   );
 }

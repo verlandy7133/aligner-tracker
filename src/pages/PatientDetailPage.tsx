@@ -21,6 +21,7 @@ import { deriveProgress } from '../lib/progress';
 import PatientFormModal from '../components/PatientFormModal';
 import PatientNotesSection from '../components/PatientNotesSection';
 import { callHelper, findAndOpenPdf, createFolder, describeHelperFailure } from '../lib/helper-client';
+import { READ_ONLY } from '../lib/read-only';
 
 // 把西元 birthday (YYYY-MM-DD) 轉成民國格式 (民國YYMMDD 或 民國YYYMMDD)
 // 例：1993-11-02 → 821102；2015-12-07 → 1041207
@@ -114,7 +115,8 @@ export default function PatientDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {(() => {
+          {/* readOnly mode：所有 mutation 按鈕 + 開檔按鈕都隱藏（iPad 上沒 file://、helper service 也不存在） */}
+          {!READ_ONLY && (() => {
             // 優先用 patient.sourceFolder，沒有就 derive conventional path（需要生日）
             const derived = deriveConventionalSourceFolder(patient.birthday, patient.name);
             const effectiveFolder = patient.sourceFolder || derived;
@@ -193,12 +195,14 @@ export default function PatientDetailPage() {
               📋 開指示單
             </button>
           )}
-          <button
-            onClick={() => setEditingTarget(patient)}
-            className="px-3 py-2 rounded-md text-sm bg-sky-500 text-zinc-950 font-medium hover:bg-sky-400 transition"
-          >
-            ✎ 編輯
-          </button>
+          {!READ_ONLY && (
+            <button
+              onClick={() => setEditingTarget(patient)}
+              className="px-3 py-2 rounded-md text-sm bg-sky-500 text-zinc-950 font-medium hover:bg-sky-400 transition"
+            >
+              ✎ 編輯
+            </button>
+          )}
         </div>
       </header>
 

@@ -6,6 +6,7 @@ import type { Patient, PatientStatus, PatientTrack, ProductLine } from '../types
 import PatientFormModal from '../components/PatientFormModal';
 import { derivePatientAlert } from '../config/alerts';
 import { deriveProgress } from '../lib/progress';
+import { READ_ONLY } from '../lib/read-only';
 import {
   STATUS_LABEL,
   STATUS_BADGE,
@@ -196,12 +197,14 @@ export default function PatientList() {
                 重置篩選
               </button>
             )}
-            <button
-              onClick={() => setModalTarget('new')}
-              className="px-3 py-2 rounded-md text-sm bg-sky-500 text-zinc-950 font-medium hover:bg-sky-400 transition"
-            >
-              + 新增病患
-            </button>
+            {!READ_ONLY && (
+              <button
+                onClick={() => setModalTarget('new')}
+                className="px-3 py-2 rounded-md text-sm bg-sky-500 text-zinc-950 font-medium hover:bg-sky-400 transition"
+              >
+                + 新增病患
+              </button>
+            )}
           </div>
         </div>
 

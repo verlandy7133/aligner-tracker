@@ -1,5 +1,12 @@
 // 與本機 folder-helper service 對話的 client。
 // helper 跑在 http://127.0.0.1:8765 (見 scripts/folder-helper.mjs)
+//
+// readOnly mode（Stage B、iPad 唯讀 web）：
+//   - 沒 helper service（iPad 上沒辦法跑 Node 後台）
+//   - 用 same-origin /api/* (見 server/index.js)
+//   - 大多數 mutation endpoint 不會被 UI 觸發、但 getImageUrl / listFolderFiles 等讀取功能要 redirect
+
+import { READ_ONLY } from './read-only';
 
 export type HelperEndpoint = 'open-folder' | 'open-file';
 
@@ -49,12 +56,34 @@ export async function listFolderNames(folder: string): Promise<{ names: string[]
 }
 
 // 列指定資料夾底下所有圖片檔（給病患照片 slot 選擇器用）
+// readOnly mode redirect 到 /api/files（server 端 path-traversal-safe、本機 helper 不可用）
 export async function listFolderFiles(
   folder: string,
   types: string[] = ['jpg', 'jpeg', 'png', 'heic'],
 ): Promise<{ names: string[]; folder: string } | { error: string }> {
+  const typesParam = types.join(',');
+  if (READ_ONLY) {
+    try {
+      const resp = await fetch(
+        `/api/files?folder=${encodeURIComponent(folder)}&types=${encodeURIComponent(typesParam)}`,
+      );
+      if (resp.ok) {
+        const data = (await resp.json()) as { folder: string; count: number; files: string[] };
+        // server 端 filter image 副檔名（其實也回傳所有 files、前端再 filter）
+        const lcTypes = types.map((t) => t.toLowerCase());
+        const filtered = data.files.filter((n) => {
+          const dot = n.lastIndexOf('.');
+          if (dot < 0) return false;
+          return lcTypes.includes(n.slice(dot + 1).toLowerCase());
+        });
+        return { names: filtered, folder: data.folder };
+      }
+      return { error: await resp.text() };
+    } catch {
+      return { error: 'server-down' };
+    }
+  }
   try {
-    const typesParam = types.join(',');
     const resp = await fetch(
       `${HELPER_BASE}/list-folder-files?folder=${encodeURIComponent(folder)}&types=${encodeURIComponent(typesParam)}`,
     );
@@ -68,8 +97,13 @@ export async function listFolderFiles(
   }
 }
 
-// 產出 <img src="..."> 用的 URL（透過 helper /serve-image 串本機圖片）
+// 產出 <img src="..."> 用的 URL
+// readOnly mode：用 /api/image（same-origin、走 Stage B server）
+// master mode：用 helper /serve-image（localhost:8765）
 export function getImageUrl(absolutePath: string): string {
+  if (READ_ONLY) {
+    return `/api/image?path=${encodeURIComponent(absolutePath)}`;
+  }
   return `${HELPER_BASE}/serve-image?path=${encodeURIComponent(absolutePath)}`;
 }
 

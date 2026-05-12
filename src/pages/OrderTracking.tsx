@@ -13,6 +13,7 @@ import AlertSettingsModal from '../components/AlertSettingsModal';
 import { PROGRESS_BADGE, TRACK_LABEL, TRACK_BADGE, REFINEMENT_LABEL, REFINEMENT_BADGE } from '../labels';
 import { labBadgeStyle, useLabs } from '../lib/labs';
 import { doctorBadgeStyle, useDoctors } from '../lib/doctors';
+import { READ_ONLY } from '../lib/read-only';
 import {
   deriveOrderAlerts,
   ORDER_ALERT_BADGE,
@@ -204,18 +205,22 @@ export default function OrderTracking() {
           >
             🖨 月報
           </a>
-          <button
-            onClick={() => setPatientModalTarget('new')}
-            className="px-3 py-2 rounded-md text-sm border border-sky-500/40 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20 transition"
-          >
-            + 新增病患
-          </button>
-          <button
-            onClick={() => setModalTarget('new')}
-            className="px-3 py-2 rounded-md text-sm bg-sky-500 text-zinc-950 font-medium hover:bg-sky-400 transition"
-          >
-            + 新增下單
-          </button>
+          {!READ_ONLY && (
+            <>
+              <button
+                onClick={() => setPatientModalTarget('new')}
+                className="px-3 py-2 rounded-md text-sm border border-sky-500/40 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20 transition"
+              >
+                + 新增病患
+              </button>
+              <button
+                onClick={() => setModalTarget('new')}
+                className="px-3 py-2 rounded-md text-sm bg-sky-500 text-zinc-950 font-medium hover:bg-sky-400 transition"
+              >
+                + 新增下單
+              </button>
+            </>
+          )}
         </div>
       </header>
 

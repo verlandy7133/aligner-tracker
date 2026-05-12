@@ -278,10 +278,8 @@ export default function PatientDetailPage() {
         </Card>
       </div>
 
-      {/* 病患筆記 + 8-slot 病歷照片
-          readOnly mode (iPad)：在這顯示給看
-          master mode：移到 ✎ 編輯 modal 內、避免兩處 entry 混亂 */}
-      {READ_ONLY && <PatientNotesSection patient={patient} />}
+      {/* 病患筆記 + 8-slot 病歷照片（inline 在詳細頁、master + readOnly 都顯示）*/}
+      <PatientNotesSection patient={patient} />
 
       {/* 下單紀錄 */}
       <section>

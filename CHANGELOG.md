@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.3.5 — 2026-05-13
+
+revert v0.3.4 — 照片區回到詳細頁 inline、不要在編輯 modal 內。
+
+### 變動
+
+- `PatientFormModal`：移除 tab nav、移除 photos tab、移除 PatientNotesSection import、max-width `max-w-6xl` → `max-w-2xl`（回 v0.3.3 大小）
+- `PatientDetailPage`：master mode 也顯示 PatientNotesSection（不再只 readOnly）
+
+### 為什麼 revert
+
+user 試 v0.3.4 後反饋「想跟之前一樣 放照片在第一頁」 — 進 modal 切 tab 兩步比 inline 直接看見一步差。詳細頁底下 inline 體驗更好（一眼掃完）。
+
 ## v0.3.4 — 2026-05-13
 
 照片區從詳細頁底下搬進「✎ 編輯」modal 內、做成 tab。

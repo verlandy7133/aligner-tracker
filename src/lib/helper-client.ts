@@ -107,6 +107,73 @@ export function getImageUrl(absolutePath: string): string {
   return `${HELPER_BASE}/serve-image?path=${encodeURIComponent(absolutePath)}`;
 }
 
+// ─── AI 一鍵填入照片（Claude vision、Haiku 4.5）─────────
+export type AnthropicKeyStatus = {
+  state: 'ok' | 'helper-down';
+  configured: boolean;
+  file?: string;
+};
+
+export async function checkAnthropicKey(): Promise<AnthropicKeyStatus> {
+  try {
+    const resp = await fetch(`${HELPER_BASE}/anthropic-key-status`);
+    if (!resp.ok) return { state: 'helper-down', configured: false };
+    const data = (await resp.json()) as { configured: boolean; file: string };
+    return { state: 'ok', configured: data.configured, file: data.file };
+  } catch {
+    return { state: 'helper-down', configured: false };
+  }
+}
+
+export type PhotoClassification = {
+  filename: string;
+  slot: string; // PhotoSlot key or 'unknown'
+  confidence: number;
+  reason: string;
+};
+
+export type ClassifyPhotosResult =
+  | {
+      state: 'ok';
+      images: string[];
+      mappings: PhotoClassification[];
+      usage?: { input_tokens?: number; output_tokens?: number };
+      model?: string;
+      warnings?: string[];
+    }
+  | { state: 'no-key'; hint: string }
+  | { state: 'error'; message: string; detail?: string }
+  | { state: 'helper-down' };
+
+export async function classifyPhotos(folder: string): Promise<ClassifyPhotosResult> {
+  try {
+    const resp = await fetch(
+      `${HELPER_BASE}/classify-photos?folder=${encodeURIComponent(folder)}`,
+    );
+    if (resp.ok) {
+      const data = (await resp.json()) as {
+        images: string[];
+        mappings: PhotoClassification[];
+        usage?: { input_tokens?: number; output_tokens?: number };
+        model?: string;
+        warnings?: string[];
+      };
+      return { state: 'ok', ...data };
+    }
+    const data = (await resp.json().catch(() => ({ error: 'unknown' }))) as {
+      error: string;
+      hint?: string;
+      detail?: string;
+    };
+    if (data.error?.includes('Anthropic API key')) {
+      return { state: 'no-key', hint: data.hint ?? '' };
+    }
+    return { state: 'error', message: data.error, detail: data.detail };
+  } catch {
+    return { state: 'helper-down' };
+  }
+}
+
 // 建立資料夾（master 才能；follower 會回 403）
 export type CreateFolderResult =
   | { state: 'created'; path: string }

@@ -13,22 +13,284 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../db';
 import type { Patient, PhotoMeta, PhotoSlot, PhotoSlotGroup } from '../types/Patient';
 import { PHOTO_SLOTS, PHOTO_GROUP_LABEL } from '../types/Patient';
-import { listFolderFiles, getImageUrl } from '../lib/helper-client';
+import {
+  listFolderFiles,
+  getImageUrl,
+  checkAnthropicKey,
+  classifyPhotos,
+  type PhotoClassification,
+} from '../lib/helper-client';
 import { PHOTO_BORDER_STYLE } from '../lib/photo-style';
 import { READ_ONLY } from '../lib/read-only';
 
 export default function PatientNotesSection({ patient }: { patient: Patient }) {
+  const [hasAnthropicKey, setHasAnthropicKey] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+
+  useEffect(() => {
+    if (READ_ONLY) return;
+    checkAnthropicKey().then((r) => setHasAnthropicKey(r.configured));
+  }, []);
+
+  const canAiFill = hasAnthropicKey && !READ_ONLY && !!patient.sourceFolder;
+
   return (
     <section className="rounded-xl border border-zinc-800 bg-zinc-900/30">
-      <header className="px-5 py-3 border-b border-zinc-800">
+      <header className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between">
         <h2 className="text-sm font-medium text-zinc-200">📋 病歷照片 / 筆記</h2>
+        {canAiFill && (
+          <button
+            onClick={() => setAiOpen(true)}
+            className="px-3 py-1.5 rounded-md text-xs bg-violet-500/15 border border-violet-500/40 text-violet-300 hover:bg-violet-500/25 transition"
+            title="用 Claude vision 自動分析資料夾內所有照片、配對到 slot"
+          >
+            🤖 一鍵填入
+          </button>
+        )}
       </header>
       <div className="p-5 space-y-6">
-        {/* v0.1.10 順序對調：照片在上、筆記在下 */}
         <PhotoSlotGrid patient={patient} />
         <MarkdownNoteEditor patient={patient} />
       </div>
+      {aiOpen && (
+        <PhotoAIPickerModal patient={patient} onClose={() => setAiOpen(false)} />
+      )}
     </section>
+  );
+}
+
+/* ─── AI 一鍵填入 modal（Claude vision 自動分類）────── */
+function PhotoAIPickerModal({
+  patient,
+  onClose,
+}: {
+  patient: Patient;
+  onClose: () => void;
+}) {
+  const [phase, setPhase] = useState<'loading' | 'result' | 'applying' | 'done' | 'error'>('loading');
+  const [mappings, setMappings] = useState<PhotoClassification[]>([]);
+  const [picks, setPicks] = useState<Record<string, PhotoSlot | 'skip'>>({});
+  const [usage, setUsage] = useState<{ input_tokens?: number; output_tokens?: number } | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const r = await classifyPhotos(patient.sourceFolder);
+      if (cancelled) return;
+      if (r.state === 'ok') {
+        setMappings(r.mappings);
+        setUsage(r.usage ?? null);
+        setWarnings(r.warnings ?? []);
+        // 預設 picks：confidence > 0.5 用 Claude 建議、否則 skip
+        const initialPicks: Record<string, PhotoSlot | 'skip'> = {};
+        const usedSlots = new Set<string>();
+        for (const c of r.mappings) {
+          if (c.slot !== 'unknown' && c.confidence > 0.5 && !usedSlots.has(c.slot)) {
+            initialPicks[c.filename] = c.slot as PhotoSlot;
+            usedSlots.add(c.slot);
+          } else {
+            initialPicks[c.filename] = 'skip';
+          }
+        }
+        setPicks(initialPicks);
+        setPhase('result');
+      } else if (r.state === 'no-key') {
+        setError('Anthropic API key 未設定 — ' + r.hint);
+        setPhase('error');
+      } else if (r.state === 'helper-down') {
+        setError('helper 沒回應');
+        setPhase('error');
+      } else {
+        setError(r.message + (r.detail ? '\n\n' + r.detail : ''));
+        setPhase('error');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [patient.sourceFolder]);
+
+  async function applyPicks() {
+    setPhase('applying');
+    const nextPhotos: Partial<Record<PhotoSlot, PhotoMeta>> = { ...(patient.photos || {}) };
+    for (const [filename, slot] of Object.entries(picks)) {
+      if (slot === 'skip') continue;
+      // 保留既有 PhotoMeta 的 transform 設定（rotate/scale/brightness）、只改 filename
+      const existing = nextPhotos[slot as PhotoSlot];
+      nextPhotos[slot as PhotoSlot] = existing
+        ? { ...existing, filename }
+        : { filename };
+    }
+    await db.patients.update(patient.id, {
+      photos: nextPhotos,
+      updatedAt: new Date().toISOString(),
+    });
+    setPhase('done');
+    setTimeout(onClose, 1200);
+  }
+
+  // 計算「會套用幾筆 / skip 幾筆」
+  const stats = (() => {
+    let assigned = 0;
+    let skipped = 0;
+    for (const v of Object.values(picks)) {
+      if (v === 'skip') skipped++;
+      else assigned++;
+    }
+    return { assigned, skipped };
+  })();
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70 backdrop-blur-sm"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full max-w-5xl max-h-[90vh] bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl flex flex-col">
+        <header className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-zinc-100">🤖 AI 一鍵填入</h3>
+            <p className="text-xs text-zinc-500 mt-1">
+              Claude Haiku 4.5 vision · 病患資料夾：<code className="font-mono">{patient.sourceFolder}</code>
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            disabled={phase === 'applying'}
+            className="text-zinc-500 hover:text-zinc-200 text-xl w-8 h-8 flex items-center justify-center rounded hover:bg-zinc-800 disabled:opacity-50"
+          >
+            ×
+          </button>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          {phase === 'loading' && (
+            <div className="flex flex-col items-center justify-center py-20 gap-3">
+              <div className="text-violet-400 text-2xl animate-pulse">🤖</div>
+              <p className="text-sm text-zinc-300">Claude 正在分析照片…（10-30 秒）</p>
+              <p className="text-xs text-zinc-500">把照片丟給 Claude vision、判斷每張該配對到哪個 slot</p>
+            </div>
+          )}
+
+          {phase === 'error' && (
+            <div className="px-3 py-3 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300 text-sm whitespace-pre-wrap">
+              ⚠️ {error}
+            </div>
+          )}
+
+          {phase === 'done' && (
+            <div className="px-3 py-3 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-sm">
+              ✓ 套用完成、{stats.assigned} 個 slot 已填入。視窗即將關閉…
+            </div>
+          )}
+
+          {(phase === 'result' || phase === 'applying') && (
+            <div className="space-y-3">
+              {warnings.length > 0 && (
+                <div className="px-3 py-2 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs">
+                  {warnings.map((w, i) => (
+                    <div key={i}>⚠️ {w}</div>
+                  ))}
+                </div>
+              )}
+              <div className="text-xs text-zinc-400">
+                Claude 分析了 {mappings.length} 張照片。會套用：
+                <span className="text-emerald-400 ml-1">{stats.assigned} 個</span>
+                · 跳過：<span className="text-zinc-500 ml-1">{stats.skipped}</span>
+                {usage && (
+                  <span className="text-zinc-600 ml-3">
+                    （用了 {usage.input_tokens} input + {usage.output_tokens} output tokens、約 NT$
+                    {(((usage.input_tokens ?? 0) * 0.8 + (usage.output_tokens ?? 0) * 4) / 1000000 * 30).toFixed(2)}）
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {mappings.map((m) => {
+                  const fullPath = `${patient.sourceFolder}\\${m.filename}`;
+                  const currentPick = picks[m.filename] ?? 'skip';
+                  return (
+                    <div key={m.filename} className="rounded-md border border-zinc-800 bg-zinc-900/40 overflow-hidden">
+                      <div className="aspect-[4/3] bg-zinc-950">
+                        <img
+                          src={getImageUrl(fullPath)}
+                          alt={m.filename}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                          onError={(e) => ((e.target as HTMLImageElement).style.opacity = '0.3')}
+                        />
+                      </div>
+                      <div className="p-2 space-y-1">
+                        <div className="text-[10px] text-zinc-500 font-mono truncate" title={m.filename}>
+                          {m.filename}
+                        </div>
+                        <div className="text-[10px] text-zinc-400">
+                          建議：<strong className="text-violet-300">{m.slot}</strong>{' '}
+                          <span className="text-zinc-600">({Math.round(m.confidence * 100)}%)</span>
+                        </div>
+                        <div className="text-[10px] text-zinc-600 line-clamp-2">{m.reason}</div>
+                        <select
+                          value={currentPick}
+                          onChange={(e) =>
+                            setPicks((p) => ({
+                              ...p,
+                              [m.filename]: e.target.value as PhotoSlot | 'skip',
+                            }))
+                          }
+                          disabled={phase === 'applying'}
+                          className="w-full h-7 px-2 rounded bg-zinc-900 border border-zinc-700 text-xs text-zinc-200 focus:outline-none focus:border-sky-500/50 disabled:opacity-50"
+                        >
+                          <option value="skip">— 跳過 —</option>
+                          {PHOTO_SLOTS.map((s) => (
+                            <option key={s.key} value={s.key}>
+                              {s.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <footer className="px-6 py-3 border-t border-zinc-800 flex items-center justify-between gap-2">
+          <p className="text-[11px] text-zinc-500">
+            套用 = 覆寫對應 slot 的綁定（旋轉/縮放/亮度設定保留）。下拉選 「跳過」不套用。
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              disabled={phase === 'applying'}
+              className="px-3 py-1.5 rounded-md text-xs border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition disabled:opacity-50"
+            >
+              {phase === 'done' ? '關閉' : '取消'}
+            </button>
+            {phase === 'result' && (
+              <button
+                onClick={applyPicks}
+                disabled={stats.assigned === 0}
+                className="px-3 py-1.5 rounded-md text-xs bg-violet-500/15 border border-violet-500/40 text-violet-300 hover:bg-violet-500/25 transition disabled:opacity-50"
+              >
+                ⚡ 套用（{stats.assigned} 個）
+              </button>
+            )}
+            {phase === 'applying' && (
+              <button
+                disabled
+                className="px-3 py-1.5 rounded-md text-xs bg-violet-500/15 border border-violet-500/40 text-violet-300 disabled:opacity-70"
+              >
+                ⏳ 套用中…
+              </button>
+            )}
+          </div>
+        </footer>
+      </div>
+    </div>
   );
 }
 

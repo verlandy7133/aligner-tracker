@@ -1,5 +1,54 @@
 # Changelog
 
+## v0.3.6 — 2026-05-13
+
+🤖 AI 一鍵填入照片（Claude Haiku 4.5 vision）— 開發機優先（key gating）。
+
+### 新增
+
+- **helper service 加 2 endpoints**：
+  - `GET /anthropic-key-status` — 回 `{ configured: bool }`、給 App 決定要不要顯示按鈕
+  - `GET /classify-photos?folder=<path>` — 把資料夾內所有照片丟 Claude vision、回 14-slot mapping JSON
+- **`readAnthropicKey()` 從 `dev-data/anthropic-key.txt` 讀 API key**：支援純 key 或含 `ANTHROPIC_API_KEY=...` 格式、剝掉 export / quote / 註解
+- **PatientNotesSection 加「🤖 一鍵填入」按鈕**（header 右側）：
+  - 只在有 key + 非 readOnly + 有 sourceFolder 時顯示
+  - 自動 gating：D 機放 key、筆電不放 = 按鈕只在 D 機出現
+- **新 `PhotoAIPickerModal` component**：
+  - Loading state（10-30 秒、Claude 分析中）
+  - 結果 preview grid：每張照片 + Claude 建議 slot + confidence + reason + dropdown 可改
+  - 預設：confidence > 0.5 且 slot 不重複 → 自動採用、否則 skip
+  - 顯示 token usage + 預估成本（NT$）
+  - 套用後 batch 寫進 patient.photos（保留既有 rotate/scale/brightness 設定、只改 filename）
+
+### 限制
+
+- **HEIC 不支援**（Claude API 限制、會 skip 並 warn user）— 之後可加 Python PIL 自動轉檔
+- **每次最多 20 張**（Claude API token 限制、超過分批、之後做）
+- **未測 accuracy**：第一次跑要 user 驗證效果、調 prompt（之後 iterate）
+
+### Setup（D 機）
+
+```powershell
+# 從 診所業績-app/.env 抽 ANTHROPIC_API_KEY 值
+# 寫到 aligner-tracker/dev-data/anthropic-key.txt（純 key 一行、無前綴）
+echo "sk-ant-..." > D:\dev\矯正追蹤-app\dev-data\anthropic-key.txt
+# 重啟 npm run start、按鈕會出現
+```
+
+筆電不放 key → 按鈕自動隱藏、不會誤觸 API。
+
+### 預估成本
+
+- Haiku 4.5: ~$0.016 / 病患（~NT$0.5）
+- 365 病患全跑：~NT$200
+
+### 設計筆記
+
+- **gating by API key 比 role 簡單**：不用改 clinic-role.txt、user 自己決定誰能用
+- **保留 PhotoMeta transform 設定**：套用時只改 `filename`、`rotate / scale / brightness` 保留
+- **dropdown 可手動覆寫**：Claude 建議錯、user 直接選
+- **prompt 用 raw JSON output**：避免 markdown fence wrap、parse 容錯
+
 ## v0.3.5 — 2026-05-13
 
 revert v0.3.4 — 照片區回到詳細頁 inline、不要在編輯 modal 內。

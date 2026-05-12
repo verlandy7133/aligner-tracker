@@ -25,6 +25,23 @@ const SCAN_SCRIPT = path.join(PROJECT_ROOT, 'scripts', 'scan-aligner-folders.mjs
 const PATIENTS_JSON = path.join(PROJECT_ROOT, 'dev-data', 'patients-import.json');
 const ROLE_FILE = path.join(PROJECT_ROOT, 'dev-data', 'clinic-role.txt');
 const PATHS_FILE = path.join(PROJECT_ROOT, 'dev-data', 'clinic-paths.json');
+const ANTHROPIC_KEY_FILE = path.join(PROJECT_ROOT, 'dev-data', 'anthropic-key.txt');
+
+// 讀 Anthropic API key（AI 一鍵填入用）
+function readAnthropicKey() {
+  try {
+    const raw = fs.readFileSync(ANTHROPIC_KEY_FILE, 'utf8').trim();
+    // 防呆：剝掉可能存在的 export / quote / 註解
+    const cleaned = raw
+      .split('\n')[0] // 只第一行
+      .replace(/^(export\s+)?ANTHROPIC_API_KEY\s*=\s*/, '')
+      .replace(/^["']|["']$/g, '')
+      .trim();
+    return cleaned || null;
+  } catch {
+    return null;
+  }
+}
 
 // ─── 路徑設定（NAS-ready）───────────────────────────────
 // clinic-paths.json schema:
@@ -616,6 +633,241 @@ const server = http.createServer((req, res) => {
       res.statusCode = 500;
       res.end(`readdir failed: ${e.message}`);
     }
+    return;
+  }
+
+  // 檢查 Anthropic API key 是否設定（給 App 決定要不要顯示「🤖 一鍵填入」按鈕）
+  if (url.pathname === '/anthropic-key-status') {
+    const key = readAnthropicKey();
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({
+      configured: !!key,
+      file: ANTHROPIC_KEY_FILE,
+    }));
+    return;
+  }
+
+  // AI 一鍵填入：把病患資料夾內所有照片丟 Claude vision、自動配對到 12 個 slot
+  // query: folder=<absolute-path>
+  // 回 { images: [...filenames], mappings: [{ filename, slot, confidence, reason }], usage: { input_tokens, output_tokens } }
+  if (url.pathname === '/classify-photos') {
+    const folder = url.searchParams.get('folder');
+    if (!folder) {
+      res.statusCode = 400;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'missing folder query' }));
+      return;
+    }
+    const apiKey = readAnthropicKey();
+    if (!apiKey) {
+      res.statusCode = 400;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(
+        JSON.stringify({
+          error: '尚未設定 Anthropic API key',
+          hint: `請在 ${ANTHROPIC_KEY_FILE} 寫入 sk-ant-... 的 key (純文字、一行)`,
+        }),
+      );
+      return;
+    }
+
+    const remapped = remapPath(folder);
+    const allowed = getAllowedRoots();
+    if (!allowed.some((root) => remapped.startsWith(root))) {
+      res.statusCode = 403;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: `folder not in allowlist (allowed: ${allowed.join(', ')})` }));
+      return;
+    }
+    if (!fs.existsSync(remapped)) {
+      res.statusCode = 404;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: `folder not found: ${remapped}` }));
+      return;
+    }
+
+    (async () => {
+      try {
+        // 1. 列出所有圖片檔（Claude vision 不支援 HEIC、先 skip）
+        const entries = fs.readdirSync(remapped, { withFileTypes: true });
+        const allImages = entries
+          .filter((e) => e.isFile())
+          .map((e) => e.name)
+          .filter((n) => /\.(jpe?g|png|webp|gif)$/i.test(n));
+        const heicImages = entries
+          .filter((e) => e.isFile())
+          .map((e) => e.name)
+          .filter((n) => /\.heic$/i.test(n));
+
+        if (allImages.length === 0) {
+          res.setHeader('Content-Type', 'application/json');
+          res.end(
+            JSON.stringify({
+              images: [],
+              mappings: [],
+              warnings: heicImages.length ? [`${heicImages.length} 張 HEIC 不支援、需要先轉成 JPG`] : [],
+            }),
+          );
+          return;
+        }
+
+        // 2. Read + base64 encode（Claude API max ~20 image / call、超過要分批；先簡單版單批）
+        const MAX_IMAGES = 20;
+        const batchImages = allImages.slice(0, MAX_IMAGES);
+        const content = [];
+        for (let i = 0; i < batchImages.length; i++) {
+          const filename = batchImages[i];
+          const buf = fs.readFileSync(path.join(remapped, filename));
+          const ext = path.extname(filename).slice(1).toLowerCase();
+          const mediaType =
+            ext === 'jpg' || ext === 'jpeg'
+              ? 'image/jpeg'
+              : ext === 'png'
+                ? 'image/png'
+                : ext === 'webp'
+                  ? 'image/webp'
+                  : 'image/jpeg';
+          content.push({
+            type: 'text',
+            text: `Photo #${i + 1}: ${filename}`,
+          });
+          content.push({
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: mediaType,
+              data: buf.toString('base64'),
+            },
+          });
+        }
+
+        // 3. Prompt：詳細列 14 個 slot 定義、要 Claude 返回 raw JSON array
+        const systemPrompt = `You are analyzing dental orthodontic patient photos to classify each into one of 14 standard slots.
+
+Reply with **ONLY a valid JSON array** (no markdown fences, no explanation outside JSON), one entry per input photo, in the SAME order as provided.
+
+Each entry MUST be:
+{
+  "filename": "<exact filename from input>",
+  "slot": "<one of slot keys below, or 'unknown'>",
+  "confidence": <0.0-1.0>,
+  "reason": "<short Chinese or English reason>"
+}
+
+Slot keys:
+- portraitFrontalRest: 人像正面休息（face frontal, mouth neutral/closed, no smile, head at 0°）
+- portraitFrontalSmile: 人像正面微笑（face frontal, smiling showing teeth, head at 0°）
+- portraitOblique45Rest: 人像 45° 斜位休息（half-profile angle, no smile）
+- portraitOblique45Smile: 人像 45° 斜位微笑（half-profile angle, smiling）
+- portraitProfileRest: 人像 90° 側面休息（full side profile, no smile）
+- portraitProfileSmile: 人像 90° 側面微笑（full side profile, smiling）
+- pano: X-ray panoramic（黑白全口環口 X 光、寬幅、顯示所有牙齒）
+- ceph: X-ray cephalometric（側顱 X 光、側面骨架）
+- frontClosed: intraoral front view, 上下牙咬合（牙齒閉合的口內正面照）
+- frontOpen: intraoral front view, 口張開（露出舌頭/牙齦的口內正面照）
+- leftClosed: intraoral left side view, 牙齒閉合（左側口內咬合照、看到左邊側牙）
+- rightClosed: intraoral right side view, 牙齒閉合（右側口內咬合照、看到右邊側牙）
+- upperOcclusal: 上顎咬合面（mirror 反射拍上顎、看到所有上排牙齒從上往下視角）
+- lowerOcclusal: 下顎咬合面（mirror 反射拍下顎、看到所有下排牙齒從下往上視角）
+
+Rules:
+- Each slot should be assigned to at most ONE photo. If multiple photos seem to fit the same slot, only assign it to the BEST fit; the rest become "unknown".
+- If a photo clearly does not match any slot (e.g. a document scan, an unrelated image), use "unknown".
+- Be conservative: prefer "unknown" with low confidence over wrong slot.`;
+
+        const userText = `Analyze these ${batchImages.length} photos and classify each.`;
+        const messages = [
+          {
+            role: 'user',
+            content: [{ type: 'text', text: userText }, ...content],
+          },
+        ];
+
+        // 4. Anthropic API call
+        const apiBody = {
+          model: 'claude-haiku-4-5-20251024',
+          max_tokens: 4000,
+          system: systemPrompt,
+          messages,
+        };
+
+        console.log(`[classify-photos] folder=${remapped}, images=${batchImages.length}`);
+        const apiResp = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify(apiBody),
+        });
+
+        if (!apiResp.ok) {
+          const errText = await apiResp.text();
+          console.error('[classify-photos] API error', apiResp.status, errText);
+          res.statusCode = 502;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(
+            JSON.stringify({
+              error: `Anthropic API ${apiResp.status}`,
+              detail: errText.slice(0, 500),
+            }),
+          );
+          return;
+        }
+
+        const apiData = await apiResp.json();
+        const replyText = apiData.content?.[0]?.text ?? '';
+
+        // 5. Parse JSON from reply（strip markdown fence 容錯）
+        let mappings;
+        try {
+          const cleaned = replyText
+            .replace(/^```(?:json)?\s*/i, '')
+            .replace(/\s*```$/i, '')
+            .trim();
+          mappings = JSON.parse(cleaned);
+          if (!Array.isArray(mappings)) {
+            throw new Error('Expected JSON array');
+          }
+        } catch (e) {
+          console.error('[classify-photos] parse error', e, 'reply:', replyText.slice(0, 500));
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(
+            JSON.stringify({
+              error: 'Claude 回應不是合法 JSON',
+              raw: replyText.slice(0, 1000),
+            }),
+          );
+          return;
+        }
+
+        const warnings = [];
+        if (heicImages.length) {
+          warnings.push(`${heicImages.length} 張 HEIC 不支援（Claude vision 限制）、需先轉 JPG`);
+        }
+        if (allImages.length > MAX_IMAGES) {
+          warnings.push(`只分析前 ${MAX_IMAGES} 張、其餘 ${allImages.length - MAX_IMAGES} 張要分批跑（之後做）`);
+        }
+
+        res.setHeader('Content-Type', 'application/json');
+        res.end(
+          JSON.stringify({
+            images: batchImages,
+            mappings,
+            usage: apiData.usage,
+            model: apiData.model,
+            warnings,
+          }),
+        );
+      } catch (e) {
+        console.error('[classify-photos] exception', e);
+        res.statusCode = 500;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    })();
     return;
   }
 

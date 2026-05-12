@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.3.2 — 2026-05-12
+
+路徑遷移工具：dataRoot 改動後、批次改寫 IndexedDB 內舊 sourceFolder / consentPdfPath。
+
+### 場景
+
+User v0.3.1 升級後把 dataRoot 從 `C:\矯正` 改成 `W:\0矯正追蹤`、但 365 個病患 IndexedDB 內 `sourceFolder` 還是 `C:\矯正\病患資料夾\xxx` → 點「📁 開資料夾」打開錯位置。
+
+### 新增
+
+- **`src/lib/path-migration.ts`** — `scanMigration()` + `applyMigration()`
+  - 偵測舊 prefix：`C:\矯正\` / `D:\矯正\` / `W:\矯正追蹤\` → 改寫到當前 dataRoot
+  - 不會誤改其他欄位、只動 `sourceFolder` 跟 `consentPdfPath`
+- **設定 → 路徑遷移 section**：在 PathsSection 之後
+  - 點「🔍 掃描」→ 看候選筆數 + 分類（已是新路徑 / 待遷移 / 未知 prefix）
+  - 預覽前 5 筆變更（old → new diff）
+  - 確認後點「⚡ 執行遷移」→ batch update IndexedDB
+  - 完成提示「Ctrl+Shift+R + 推到 NAS」
+
+### 設計
+
+- 兩步驟（掃描 → 套用）避免誤觸
+- 預覽顯示具體 old/new 對照、user 看到才安心
+- 「未知 prefix」不會被誤改（保留原值）
+- readOnly mode 隱藏此 section
+
 ## v0.3.1 — 2026-05-12
 
 Stage B 實際 deploy 到 NAS Docker 跑通 + 「矯正追蹤」資料夾改名「0矯正追蹤」（排前面）。

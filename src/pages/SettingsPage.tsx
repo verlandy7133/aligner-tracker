@@ -55,6 +55,12 @@ import {
   PHOTO_COLOR_PRESETS,
 } from '../lib/photo-style';
 import { READ_ONLY } from '../lib/read-only';
+import {
+  scanMigration,
+  applyMigration,
+  type MigrationScan,
+  type MigrationCandidate,
+} from '../lib/path-migration';
 
 export default function SettingsPage() {
   return (
@@ -73,6 +79,7 @@ export default function SettingsPage() {
         <>
           <UpdateSection />
           <PathsSection />
+          <PathMigrationSection />
           <SyncSection />
           <LabSection />
           <DoctorSection />
@@ -709,6 +716,166 @@ function PathsSection() {
           </div>
         </div>
       )}
+    </section>
+  );
+}
+
+/* ─── 路徑遷移（dataRoot 改了之後、批次改寫 IndexedDB 內舊路徑）─── */
+function PathMigrationSection() {
+  const [phase, setPhase] = useState<'idle' | 'scanning' | 'scanned' | 'applying' | 'done' | 'error'>('idle');
+  const [scan, setScan] = useState<MigrationScan | null>(null);
+  const [result, setResult] = useState<{ updatedPatients: number; fieldsUpdated: number } | null>(null);
+  const [error, setError] = useState('');
+  const [paths, setPaths] = useState<{ dataRoot: string } | null>(null);
+
+  useEffect(() => {
+    fetch('http://127.0.0.1:8765/paths')
+      .then((r) => r.json())
+      .then((p: { dataRoot: string }) => setPaths(p))
+      .catch(() => {});
+  }, []);
+
+  async function doScan() {
+    if (!paths?.dataRoot) {
+      setError('讀不到當前 dataRoot 設定');
+      setPhase('error');
+      return;
+    }
+    setPhase('scanning');
+    setError('');
+    setScan(null);
+    setResult(null);
+    try {
+      const r = await scanMigration(paths.dataRoot);
+      setScan(r);
+      setPhase('scanned');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setPhase('error');
+    }
+  }
+
+  async function doApply() {
+    if (!scan || scan.candidates.length === 0) return;
+    if (
+      !confirm(
+        `將遷移 ${scan.candidates.length} 個路徑欄位到新 dataRoot：\n${paths?.dataRoot}\n\n建議先去「跨機同步」推一次 sync.json 當 backup、再執行此操作。\n\n繼續？`,
+      )
+    )
+      return;
+    setPhase('applying');
+    setError('');
+    try {
+      const r = await applyMigration(scan.candidates);
+      setResult(r);
+      setPhase('done');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setPhase('error');
+    }
+  }
+
+  return (
+    <section className="rounded-xl border border-zinc-800 bg-zinc-900/30">
+      <header className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-medium text-zinc-200">路徑遷移</h2>
+          <span className="text-xs text-zinc-500">
+            把 IndexedDB 內舊 sourceFolder / consentPdfPath 改寫到當前 dataRoot
+          </span>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={doScan}
+            disabled={phase === 'scanning' || phase === 'applying'}
+            className="px-3 py-1.5 rounded-md text-xs border border-zinc-700 text-zinc-200 hover:bg-zinc-800 transition disabled:opacity-50"
+          >
+            {phase === 'scanning' ? '🔍 掃描中…' : '🔍 掃描'}
+          </button>
+          {scan && scan.candidates.length > 0 && (
+            <button
+              onClick={doApply}
+              disabled={phase === 'applying'}
+              className="px-3 py-1.5 rounded-md text-xs bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:bg-amber-500/25 transition disabled:opacity-50"
+            >
+              {phase === 'applying' ? '⏳ 套用中…' : `⚡ 執行遷移 (${scan.candidates.length})`}
+            </button>
+          )}
+        </div>
+      </header>
+      <div className="p-5 space-y-2 text-sm">
+        {paths && (
+          <p className="text-xs text-zinc-500">
+            目標 dataRoot：<code className="text-zinc-300">{paths.dataRoot}</code>
+            <br />
+            支援自動偵測的舊 prefix：<code>C:\矯正\</code>、<code>D:\矯正\</code>、<code>W:\矯正追蹤\</code> →
+            改寫成 <code>{paths.dataRoot}\</code>
+          </p>
+        )}
+        {phase === 'scanned' && scan && (
+          <div className="space-y-2">
+            <div className="px-3 py-2 rounded-md bg-zinc-800/40 border border-zinc-700/40 text-xs">
+              <div>
+                掃描 <strong className="text-zinc-200">{scan.total}</strong> 個病患：
+              </div>
+              <div className="mt-1 grid grid-cols-3 gap-2 text-zinc-400">
+                <div>
+                  ✅ 已是新路徑：
+                  <span className="text-emerald-400 tabular ml-1">{scan.alreadyCorrect}</span>
+                </div>
+                <div>
+                  🔄 待遷移：
+                  <span className="text-amber-400 tabular ml-1">{scan.candidates.length}</span>
+                </div>
+                <div>
+                  ❓ 未知 prefix：
+                  <span className="text-zinc-500 tabular ml-1">{scan.unknown}</span>
+                </div>
+              </div>
+            </div>
+            {scan.candidates.length > 0 && (
+              <details className="text-xs">
+                <summary className="cursor-pointer text-zinc-500 hover:text-zinc-300">
+                  ▸ 預覽前 5 筆變更
+                </summary>
+                <div className="mt-2 space-y-1 pl-3 font-mono text-[10px]">
+                  {scan.candidates.slice(0, 5).map((c: MigrationCandidate, i) => (
+                    <div key={i} className="text-zinc-400">
+                      <div className="text-zinc-300">{c.name} · {c.field}</div>
+                      <div className="text-rose-400/70">- {c.oldPath}</div>
+                      <div className="text-emerald-400/70">+ {c.newPath}</div>
+                    </div>
+                  ))}
+                  {scan.candidates.length > 5 && (
+                    <div className="text-zinc-600">… 還有 {scan.candidates.length - 5} 筆</div>
+                  )}
+                </div>
+              </details>
+            )}
+            {scan.candidates.length === 0 && (
+              <div className="px-3 py-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs">
+                ✓ 沒有需要遷移的路徑（全部已是新路徑或無 sourceFolder）
+              </div>
+            )}
+          </div>
+        )}
+        {phase === 'done' && result && (
+          <div className="px-3 py-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs">
+            ✓ 完成：{result.updatedPatients} 個病患、{result.fieldsUpdated} 個欄位
+            <br />
+            <strong>下一步：</strong>Ctrl+Shift+R 重整 → 試「📁 開資料夾」確認 → 去「跨機同步」推到 NAS
+          </div>
+        )}
+        {error && (
+          <div className="px-3 py-2 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+            ⚠️ {error}
+          </div>
+        )}
+        <p className="text-[11px] text-zinc-500 pt-2 border-t border-zinc-800">
+          場景：搬遷 dataRoot 後（例 C:\矯正 → W:\0矯正追蹤）、舊資料的 sourceFolder / 授權書 path 還是 C:\、需要這個工具批次改寫。
+          先「掃描」看候選清單、預覽後再「執行遷移」、不會誤改。
+        </p>
+      </div>
     </section>
   );
 }

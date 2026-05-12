@@ -1,0 +1,37 @@
+# Aligner Viewer — Stage B iPad 唯讀 web
+#
+# 在 Synology DS918+ Docker 上跑（DSM 6.2 / 7.x 都可）
+#
+# 用 docker-compose 啟動：
+#   docker-compose up -d
+#
+# 或用 DSM Docker UI 直接設定（不用 compose）：
+#   1. 先 docker save aligner-viewer:0.3.0 -o aligner-viewer-0.3.0.tar
+#   2. 上傳 .tar 到 NAS（File Station）
+#   3. DSM 主選單 → Docker → 影像 → 新增 → 從檔案 → 選 .tar
+#   4. 啟動 image:
+#      - 一般設定 → 容器名稱 aligner-viewer、勾「啟用自動重新啟動」
+#      - 進階設定 → 環境變數：PORT=8080, DATA_PATH=/data
+#      - 進階設定 → 連接埠：本機 8080 → 容器 8080
+#      - 進階設定 → 共用資料夾：n歐耐恩n/矯正追蹤 → 容器 /data (只讀)
+
+services:
+  aligner-viewer:
+    image: aligner-viewer:0.3.0
+    container_name: aligner-viewer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # NAS 上 n歐耐恩n share 的「矯正追蹤」子資料夾、唯讀
+      - /volume1/n歐耐恩n/矯正追蹤:/data:ro
+    environment:
+      - PORT=8080
+      - DATA_PATH=/data
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

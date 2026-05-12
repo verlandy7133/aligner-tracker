@@ -1,5 +1,56 @@
 # Changelog
 
+## v0.3.0 — 2026-05-12
+
+Stage B 開機：iPad 內網唯讀 web — server backend + frontend readOnly mode + Dockerfile + deployment SOP。
+
+### 新增
+
+- **`server/` — Node Express server**（~250 行、Session 1）
+  - 5 endpoints: `/api/health` `/api/snapshot` `/api/files` `/api/image` `/api/file`
+  - SPA fallback（serve `dist/index.html` for any non-API route、React Router 用）
+  - `safePath()` 嚴格擋 path traversal
+  - master-side path prefix 自動 strip（`W:\矯正追蹤\` / `D:\矯正\` / `/n歐耐恩n/矯正追蹤/`）
+  - 5min cache on images、no-cache on snapshot
+- **Frontend readOnly mode**（build flag `VITE_READ_ONLY=1`、Session 2）
+  - 啟動 fetch `/api/snapshot` → `importBackup` 到 IndexedDB
+  - component 邏輯不變、只隱 mutation UI
+  - `helper-client.ts` 的 `getImageUrl` / `listFolderFiles` 自動 redirect 到 `/api/*`
+  - nav 顯示「唯讀」徽章 + 載入失敗提示頁
+- **Dockerfile**（multi-stage、node:20-alpine、~150MB image、Session 3）
+- **`docker-compose.yml`**（LAN-only、restart unless-stopped、healthcheck）
+- **`.dockerignore`** 排除 node_modules / dist / 病患資料夾等
+- **`server/DEPLOY.md`** 完整 NAS Docker 部署 SOP
+
+### UI 改動（readOnly mode 下）
+
+- **PatientList**：隱「+ 新增病患」
+- **PatientDetailPage**：隱所有 mutation 按鈕（✎ 編輯 / 📁 開資料夾 / 📄 開授權書 / 📋 開指示單）
+- **OrderTracking**：隱「+ 新增病患/下單」
+- **PatientNotesSection**：隱 hover actions（✎ 換 ✗）、空 slot 改顯「—」、textarea `readOnly` 屬性
+- **SettingsPage**：只留 UiScale + PhotoStyle（本機視覺偏好）、其他 12 section 全隱
+
+### Build size
+
+- master mode（default）: 1061 KiB
+- **readonly mode**（VITE_READ_ONLY=1）: **997 KiB**（tree-shake -64 KiB）
+
+### 待（v0.3.x 後續 / 用戶 ops）
+
+- 實際 build + deploy 到 NAS Docker：
+  - **方法 A**：D 機裝 Docker Desktop → `docker build` + `docker save` + 上傳 → DSM Docker UI 載入
+  - **方法 B**：NAS SSH 直接 `docker build`（需先在 DSM 啟用 SSH）
+  - 兩者 SOP 都在 `server/DEPLOY.md`
+- iPad 內網測試（Safari 開 `http://192.168.0.220:8080/`）
+- 診所 master 機先掛 W: + 推 sync.json 到 NAS（前置）
+
+### 設計筆記
+
+- **「IndexedDB 當 server cache」策略** — readOnly mode 不重寫資料層、把 fetch 結果寫進 IndexedDB、後續 component 邏輯不變、`useLiveQuery` 照常 work。改動量小 8 倍
+- **master-side path prefix strip** — sync.json 內的 sourceFolder 是 W:\ Windows 絕對路徑、server 端要 strip 後當 relative 在 /data 內找
+- **無 auth** — 信任邊界 = 診所 wifi、NAS 防火牆對外擋 8080。若之後要對外、加 Basic Auth 或接登入帳號 doc
+- **Express 5 wildcard route** 從 `'*'` 改 `/.*/`  regex（path-to-regexp 新版改 syntax）
+
 ## v0.2.0 — 2026-05-07
 
 版本號規則重整 — patch 達到 16 就 bump minor 並 reset patch 到 0。

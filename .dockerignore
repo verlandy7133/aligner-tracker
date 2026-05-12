@@ -1,0 +1,35 @@
+# 不送進 build context 的東西
+
+node_modules
+**/node_modules
+dist
+.git
+.vscode
+.idea
+*.log
+*.tar
+*.tar.gz
+
+# 個資資料夾
+dev-data/
+**/病患資料夾/
+**/病患授權書/
+**/下單Excel/
+
+# Build artifacts
+build/
+coverage/
+
+# Backup files
+*.bak
+*.tmp
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 開發機本地路徑（不該進 image）
+D:/矯正
+C:/矯正

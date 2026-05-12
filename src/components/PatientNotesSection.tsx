@@ -977,7 +977,7 @@ function PhotoEditorModal({
                   <input
                     type="range"
                     min={0}
-                    max={0.45}
+                    max={0.7}
                     step={0.01}
                     value={value}
                     onChange={(e) => setCrop(side, Number(e.target.value))}
@@ -990,7 +990,7 @@ function PhotoEditorModal({
               );
             })}
             <p className="text-[10px] text-zinc-600 mt-2 px-1">
-              各邊 0~45%、裁掉的區域不顯示、剩下的撐滿 cell（縮放 + 平移）。
+              各邊 0~70%、裁掉的區域不顯示、剩下的撐滿 cell（縮放 + 平移）。對邊（上+下、左+右）加總不能超過 95%、否則 crop 不生效。
             </p>
           </div>
           <p className="text-[11px] text-zinc-500 mt-3">

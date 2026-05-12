@@ -516,6 +516,7 @@ function PhotoSlotCell({
   const filter = buildPhotoFilter(meta);
   // 旋轉 90/270 時、aspect 變橫長 → 圖會被 4:3 框裁掉、加 scale 補救
   const isQuarterRotate = meta?.rotate === 90 || meta?.rotate === 270;
+  const [isDragOver, setIsDragOver] = useState(false);
 
   async function removePhoto() {
     if (!confirm(`移除 ${slotLabel} 的照片連結？\n（檔案不會刪除、只是 App 內取消綁定）`)) return;
@@ -526,6 +527,49 @@ function PhotoSlotCell({
       updatedAt: new Date().toISOString(),
     });
   }
+
+  // ─── HTML5 drag and drop：拖一個 slot 的照片到另一個、互換 ──
+  function handleDragStart(e: React.DragEvent) {
+    if (READ_ONLY || !meta) {
+      e.preventDefault();
+      return;
+    }
+    e.dataTransfer.setData('aligner/slot', slotKey);
+    e.dataTransfer.effectAllowed = 'move';
+  }
+  function handleDragOver(e: React.DragEvent) {
+    if (READ_ONLY) return;
+    if (!e.dataTransfer.types.includes('aligner/slot')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setIsDragOver(true);
+  }
+  function handleDragLeave() {
+    setIsDragOver(false);
+  }
+  async function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragOver(false);
+    const sourceSlot = e.dataTransfer.getData('aligner/slot') as PhotoSlot;
+    if (!sourceSlot || sourceSlot === slotKey) return;
+    // Swap source & target slot meta（含 rotate/scale/brightness 設定）
+    const photos = patient.photos || {};
+    const sourceMeta = photos[sourceSlot];
+    const targetMeta = photos[slotKey];
+    const next: Partial<Record<PhotoSlot, PhotoMeta>> = { ...photos };
+    if (sourceMeta) next[slotKey] = sourceMeta;
+    else delete next[slotKey];
+    if (targetMeta) next[sourceSlot] = targetMeta;
+    else delete next[sourceSlot];
+    await db.patients.update(patient.id, {
+      photos: next,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  const dragOverRing = isDragOver
+    ? { boxShadow: '0 0 0 3px rgb(56 189 248 / 0.6), 0 0 16px rgb(56 189 248 / 0.4)' }
+    : {};
 
   if (!imageUrl || !meta) {
     // readOnly mode：空 slot 顯示「—」、不能點選
@@ -543,8 +587,13 @@ function PhotoSlotCell({
     return (
       <button
         onClick={onPickClick}
-        style={{ ...PHOTO_BORDER_STYLE, borderStyle: 'dashed' }}
-        className="aspect-[4/3] rounded-md bg-zinc-950/40 hover:bg-sky-500/5 transition flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-sky-400 group"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        style={{ ...PHOTO_BORDER_STYLE, borderStyle: 'dashed', ...dragOverRing }}
+        className={`aspect-[4/3] rounded-md bg-zinc-950/40 hover:bg-sky-500/5 transition flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-sky-400 group ${
+          isDragOver ? 'bg-sky-500/10' : ''
+        }`}
       >
         <span className="text-2xl opacity-50 group-hover:opacity-100">＋</span>
         <span className="text-[11px] text-center px-2">{slotLabel}</span>
@@ -554,8 +603,15 @@ function PhotoSlotCell({
 
   return (
     <div
-      className="relative aspect-[4/3] rounded-md overflow-hidden bg-zinc-950 group"
-      style={PHOTO_BORDER_STYLE}
+      className={`relative aspect-[4/3] rounded-md overflow-hidden bg-zinc-950 group ${
+        !READ_ONLY ? 'cursor-move' : ''
+      }`}
+      style={{ ...PHOTO_BORDER_STYLE, ...dragOverRing }}
+      draggable={!READ_ONLY}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
       <img
         src={imageUrl}

@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.3.8 — 2026-05-13
+
+8-slot 病歷照片 grid 支援拖曳交換。
+
+### 新增
+
+- **PhotoSlotCell 加 HTML5 drag & drop**：
+  - 有照片的 slot：`draggable`、cursor 變 `move`
+  - 拖到任何 slot（空 / 有照片）→ swap 內容（含 rotate/scale/brightness 設定）
+  - 拖過 target slot 時 ring + bg 高亮（sky-500）
+  - dataTransfer mime type `aligner/slot` 避免跟其他拖曳衝突
+- **readOnly mode 不支援拖曳**（iPad 端純看）
+
+### 使用
+
+- 滑鼠按住有照片的 slot → 拖到別的 slot → 放開 → 兩 slot 內容對調
+- 拖到空 slot → 照片搬過去（原 slot 變空）
+- 拖到自己 → 不動作
+
+## v0.3.7 — 2026-05-13
+
+Hotfix v0.3.6：sharp resize 圖片避免 Anthropic 32MB request limit、model 用 alias 'claude-haiku-4-5'。
+
+實際 Claude 回 model = `claude-haiku-4-5-20251001`（alias 自動帶到 Oct 2025 版）。
+
+Backend 實測 15 張 _MG_*.JPG（陳品之）全分對：pano 95% / frontClosed 90% / portraits 82-90%、共用 14647 input + 1033 output tokens ≈ NT$0.6 / 病患。
+
 ## v0.3.6 — 2026-05-13
 
 🤖 AI 一鍵填入照片（Claude Haiku 4.5 vision）— 開發機優先（key gating）。

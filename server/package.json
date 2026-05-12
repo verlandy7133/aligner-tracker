@@ -1,0 +1,18 @@
+{
+  "name": "aligner-viewer-server",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "Stage B iPad readonly web server — serve sync.json + 病患資料夾照片 / PDF",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "express": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

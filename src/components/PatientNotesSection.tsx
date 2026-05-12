@@ -616,7 +616,8 @@ function PhotoSlotCell({
       <img
         src={imageUrl}
         alt={slotLabel}
-        className="w-full h-full object-cover transition-transform"
+        draggable={false}
+        className="w-full h-full object-cover transition-transform pointer-events-none"
         style={{
           transform,
           filter,

@@ -450,6 +450,7 @@ function buildPhotoTransform(meta: PhotoMeta | undefined): string {
   if (meta.flipV) parts.push('scaleY(-1)');
   if (meta.displayScale && meta.displayScale !== 1) parts.push(`scale(${meta.displayScale})`);
   if (meta.imageStretchX && meta.imageStretchX !== 1) parts.push(`scaleX(${meta.imageStretchX})`);
+  if (meta.imageStretchY && meta.imageStretchY !== 1) parts.push(`scaleY(${meta.imageStretchY})`);
   return parts.join(' ');
 }
 
@@ -704,6 +705,9 @@ function PhotoEditorModal({
   function setImageStretchX(s: number) {
     setMeta({ ...meta, imageStretchX: s });
   }
+  function setImageStretchY(s: number) {
+    setMeta({ ...meta, imageStretchY: s });
+  }
   function reset() {
     setMeta({ filename: meta.filename }); // 清掉所有 transform
   }
@@ -722,11 +726,13 @@ function PhotoEditorModal({
     meta.flipV !== initialMeta.flipV ||
     (meta.displayScale ?? 1) !== (initialMeta.displayScale ?? 1) ||
     (meta.brightness ?? 1) !== (initialMeta.brightness ?? 1) ||
-    (meta.imageStretchX ?? 1) !== (initialMeta.imageStretchX ?? 1);
+    (meta.imageStretchX ?? 1) !== (initialMeta.imageStretchX ?? 1) ||
+    (meta.imageStretchY ?? 1) !== (initialMeta.imageStretchY ?? 1);
 
   const currentScale = meta.displayScale ?? 1;
   const currentBrightness = meta.brightness ?? 1;
   const currentStretchX = meta.imageStretchX ?? 1;
+  const currentStretchY = meta.imageStretchY ?? 1;
 
   return (
     <div
@@ -804,7 +810,8 @@ function PhotoEditorModal({
                 !meta.flipV &&
                 currentScale === 1 &&
                 currentBrightness === 1 &&
-                currentStretchX === 1
+                currentStretchX === 1 &&
+                currentStretchY === 1
               }
               className="px-3 py-2 rounded-md text-sm border border-zinc-700 text-zinc-400 hover:bg-zinc-800 transition disabled:opacity-40"
               title="清掉所有編輯"
@@ -836,7 +843,7 @@ function PhotoEditorModal({
               </button>
             )}
           </div>
-          {/* 照片寬度 slider — 0.5 ~ 2.5、控制 img scaleX（cell 不動）*/}
+          {/* 照片寬度 slider — img scaleX（cell 不動、非等比）*/}
           <div className="mt-2 flex items-center gap-3 px-1">
             <span className="text-xs text-zinc-400 font-medium w-12">照片寬度</span>
             <input
@@ -847,7 +854,7 @@ function PhotoEditorModal({
               value={currentStretchX}
               onChange={(e) => setImageStretchX(Number(e.target.value))}
               className="flex-1 accent-cyan-500"
-              title="img 水平 scaleX（旋轉 90° 後牙齒變直立、拉寬讓視覺撐滿）"
+              title="img 水平 scaleX (X 軸非等比拉伸)"
             />
             <span className="tabular text-xs text-zinc-300 w-16 text-right">
               {Math.round(currentStretchX * 100)}%
@@ -855,6 +862,32 @@ function PhotoEditorModal({
             {currentStretchX !== 1 && (
               <button
                 onClick={() => setImageStretchX(1)}
+                className="text-[10px] text-zinc-500 hover:text-zinc-200 px-1.5 py-0.5 rounded hover:bg-zinc-800 transition"
+                title="重設 100%"
+              >
+                ⟲
+              </button>
+            )}
+          </div>
+          {/* 照片高度 slider — img scaleY（Y 軸非等比）*/}
+          <div className="mt-2 flex items-center gap-3 px-1">
+            <span className="text-xs text-zinc-400 font-medium w-12">照片高度</span>
+            <input
+              type="range"
+              min={0.5}
+              max={2.5}
+              step={0.05}
+              value={currentStretchY}
+              onChange={(e) => setImageStretchY(Number(e.target.value))}
+              className="flex-1 accent-cyan-500"
+              title="img 垂直 scaleY (Y 軸非等比拉伸)"
+            />
+            <span className="tabular text-xs text-zinc-300 w-16 text-right">
+              {Math.round(currentStretchY * 100)}%
+            </span>
+            {currentStretchY !== 1 && (
+              <button
+                onClick={() => setImageStretchY(1)}
                 className="text-[10px] text-zinc-500 hover:text-zinc-200 px-1.5 py-0.5 rounded hover:bg-zinc-800 transition"
                 title="重設 100%"
               >

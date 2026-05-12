@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.3.12 — 2026-05-13
+
+加 Y 軸縮放 slider「照片高度」— 跟 X 軸獨立、各自非等比 scale。
+
+### 變動
+
+- **PhotoMeta 加 `imageStretchY`**（0.5 ~ 2.5、預設 1.0）
+- Editor modal slider「照片寬度」下新增「照片高度」slider
+- `buildPhotoTransform` 加 `scaleY(imageStretchY)`
+- 三層 scale 控制：
+  - `displayScale` (X+Y 等比)
+  - `imageStretchX` (X 軸非等比)
+  - `imageStretchY` (Y 軸非等比)
+- 「⟲ 還原」按鈕 disabled 條件接 imageStretchY
+
 ## v0.3.11 — 2026-05-13
 
 v0.3.10 修正：拉寬的是「**照片本身**」、不是「**cell 框**」。

@@ -75,8 +75,9 @@ export type PhotoMeta = {
   rotate?: 0 | 90 | 180 | 270; // 順時針度數
   flipH?: boolean; // 水平翻轉
   flipV?: boolean; // 垂直翻轉
-  displayScale?: number; // 0.5 ~ 2.0，預設 1.0 — 該 cell 內部 img 的視覺縮放（等比）
-  imageStretchX?: number; // 0.5 ~ 2.5，預設 1.0 — img 水平拉寬倍數（旋轉 90° 後拉寬用）
+  displayScale?: number; // 0.5 ~ 2.0，預設 1.0 — 該 cell 內部 img 的視覺縮放（等比 X+Y）
+  imageStretchX?: number; // 0.5 ~ 2.5，預設 1.0 — img 水平拉寬倍數（X 軸非等比 scale）
+  imageStretchY?: number; // 0.5 ~ 2.5，預設 1.0 — img 垂直拉高倍數（Y 軸非等比 scale）
   brightness?: number; // 0.5 ~ 1.5，預設 1.0 — CSS filter brightness（1.0 = 原圖）
   /** @deprecated v0.3.10 加、v0.3.11 拋棄，改用 imageStretchX。保留欄位避免舊資料炸 */
   aspectRatio?: number;

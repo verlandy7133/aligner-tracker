@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.3.10 — 2026-05-13
+
+每張照片 cell 寬高比可獨立調 — 旋轉 90° / 翻轉後想拉寬時直接 slider 改。
+
+### 新增
+
+- **`PhotoMeta` 加 `aspectRatio?: number`** — 0.5 ~ 2.5、預設 `4/3 ≈ 1.333`
+- **PhotoEditorModal 加「寬高比」slider** + 4 個 preset：
+  - 4:3 (1.333、預設)
+  - 3:4 (0.75、直立)
+  - 16:9 (1.778、寬螢幕)
+  - 1:1 (1.000、方形)
+  - 自由滑動 0.5 ~ 2.5
+- **PhotoSlotCell `aspect-[4/3]` → inline `aspectRatio` style**：每個 cell 自己決定高度、不再固定
+- **grid container 加 `items-start`**：避免 grid auto-stretch 把矮 cell 拉高
+
+### 場景
+
+口內 Right (Closed) 拍照是橫向長條（牙齒水平延伸）、4:3 框內看不完整 → 拉到 16:9 寬螢幕比例展示完整。
+旋轉 90° 後想配合 portrait 比例 → 拉到 3:4。
+
+「⟲ 還原」按鈕現在也清掉 aspectRatio 一起。
+
+## v0.3.9 — 2026-05-13
+
+Hotfix v0.3.8：拖曳不 work 修正、img 加 `draggable={false}` + `pointer-events-none` 讓 drag event 不被 img 攔截、走 outer div。
+
 ## v0.3.8 — 2026-05-13
 
 8-slot 病歷照片 grid 支援拖曳交換。

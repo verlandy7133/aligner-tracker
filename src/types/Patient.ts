@@ -77,7 +77,10 @@ export type PhotoMeta = {
   flipV?: boolean; // 垂直翻轉
   displayScale?: number; // 0.5 ~ 2.0，預設 1.0 — 該 cell 內部 img 的視覺縮放
   brightness?: number; // 0.5 ~ 1.5，預設 1.0 — CSS filter brightness（1.0 = 原圖）
+  aspectRatio?: number; // 0.5 ~ 2.5，預設 4/3 ≈ 1.333 — cell 的寬/高比（旋轉/翻轉後想拉寬時調）
 };
+
+export const DEFAULT_ASPECT_RATIO = 4 / 3;
 
 export type Patient = {
   id: string;

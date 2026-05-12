@@ -79,6 +79,11 @@ export type PhotoMeta = {
   imageStretchX?: number; // 0.5 ~ 2.5，預設 1.0 — img 水平拉寬倍數（X 軸非等比 scale）
   imageStretchY?: number; // 0.5 ~ 2.5，預設 1.0 — img 垂直拉高倍數（Y 軸非等比 scale）
   brightness?: number; // 0.5 ~ 1.5，預設 1.0 — CSS filter brightness（1.0 = 原圖）
+  // 裁切（裁掉的部分不顯示、剩下的撐滿 cell）— 0 ~ 0.45、各邊獨立
+  cropTop?: number;
+  cropBottom?: number;
+  cropLeft?: number;
+  cropRight?: number;
   /** @deprecated v0.3.10 加、v0.3.11 拋棄，改用 imageStretchX。保留欄位避免舊資料炸 */
   aspectRatio?: number;
 };

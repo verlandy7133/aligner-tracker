@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.3.13 — 2026-05-13
+
+照片裁切（4 邊獨立、emerald 色 slider）。
+
+### 新增
+
+- **PhotoMeta 加 4 個 crop 欄位**：`cropTop` / `cropBottom` / `cropLeft` / `cropRight`（各 0 ~ 0.45）
+- **Editor modal 加「✂ 裁切」section**：4 個 slider（上 / 下 / 左 / 右）+ 一鍵「⟲ 清除裁切」
+- **`buildPhotoTransform` 加 crop logic**：用 scale + translate 模擬 crop
+  - 裁掉區域不顯示、剩下視野自動撐滿 cell
+  - 等效於「視野放大 + 中心平移」(crop simulation)
+- 「⟲ 還原」按鈕條件接 crop 狀態
+
+### 使用
+
+- 上下左右各 0~45% slider、拖到要裁掉的比例
+- 裁切 + 旋轉 + 翻轉 + 縮放 + 拉寬拉高 都可以組合
+- 跨機 sync 自動帶 crop 設定
+
 ## v0.3.12 — 2026-05-13
 
 加 Y 軸縮放 slider「照片高度」— 跟 X 軸獨立、各自非等比 scale。

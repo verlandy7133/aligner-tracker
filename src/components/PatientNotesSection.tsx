@@ -443,8 +443,28 @@ function PhotoSlotGrid({ patient }: { patient: Patient }) {
 function buildPhotoTransform(meta: PhotoMeta | undefined): string {
   if (!meta) return '';
   const parts: string[] = [];
-  // 順序：rotate → flipH → flipV → displayScale (等比) → imageStretchX (水平拉伸)
-  // CSS transform 從右到左 apply、但對視覺體驗影響不大
+
+  // 裁切（最後 apply、視為「對 transformed img 進行裁切」）
+  // CSS transform 從右到左 apply、所以 crop 寫在最前面字串、最後 apply
+  const cropTop = meta.cropTop ?? 0;
+  const cropBottom = meta.cropBottom ?? 0;
+  const cropLeft = meta.cropLeft ?? 0;
+  const cropRight = meta.cropRight ?? 0;
+  const visibleW = 1 - cropLeft - cropRight;
+  const visibleH = 1 - cropTop - cropBottom;
+  if (visibleW > 0.05 && visibleH > 0.05 && (cropTop || cropBottom || cropLeft || cropRight)) {
+    // 1. 把 cell 內的視野 scale 起來、保留區域撐滿
+    const cropScaleX = 1 / visibleW;
+    const cropScaleY = 1 / visibleH;
+    // 2. translate 把保留區域中心移到 cell 中心
+    //    保留區域中心相對 img 中心的偏移（百分比、img own dimension）
+    const cropOffsetXPct = ((cropRight - cropLeft) / 2) * 100;
+    const cropOffsetYPct = ((cropBottom - cropTop) / 2) * 100;
+    parts.push(`scale(${cropScaleX}, ${cropScaleY})`);
+    parts.push(`translate(${cropOffsetXPct}%, ${cropOffsetYPct}%)`);
+  }
+
+  // 順序：rotate → flipH → flipV → displayScale (等比) → imageStretchX/Y (非等比)
   if (meta.rotate) parts.push(`rotate(${meta.rotate}deg)`);
   if (meta.flipH) parts.push('scaleX(-1)');
   if (meta.flipV) parts.push('scaleY(-1)');
@@ -708,6 +728,12 @@ function PhotoEditorModal({
   function setImageStretchY(s: number) {
     setMeta({ ...meta, imageStretchY: s });
   }
+  function setCrop(side: 'cropTop' | 'cropBottom' | 'cropLeft' | 'cropRight', v: number) {
+    setMeta({ ...meta, [side]: v });
+  }
+  function resetCrop() {
+    setMeta({ ...meta, cropTop: 0, cropBottom: 0, cropLeft: 0, cropRight: 0 });
+  }
   function reset() {
     setMeta({ filename: meta.filename }); // 清掉所有 transform
   }
@@ -727,12 +753,21 @@ function PhotoEditorModal({
     (meta.displayScale ?? 1) !== (initialMeta.displayScale ?? 1) ||
     (meta.brightness ?? 1) !== (initialMeta.brightness ?? 1) ||
     (meta.imageStretchX ?? 1) !== (initialMeta.imageStretchX ?? 1) ||
-    (meta.imageStretchY ?? 1) !== (initialMeta.imageStretchY ?? 1);
+    (meta.imageStretchY ?? 1) !== (initialMeta.imageStretchY ?? 1) ||
+    (meta.cropTop ?? 0) !== (initialMeta.cropTop ?? 0) ||
+    (meta.cropBottom ?? 0) !== (initialMeta.cropBottom ?? 0) ||
+    (meta.cropLeft ?? 0) !== (initialMeta.cropLeft ?? 0) ||
+    (meta.cropRight ?? 0) !== (initialMeta.cropRight ?? 0);
 
   const currentScale = meta.displayScale ?? 1;
   const currentBrightness = meta.brightness ?? 1;
   const currentStretchX = meta.imageStretchX ?? 1;
   const currentStretchY = meta.imageStretchY ?? 1;
+  const cropTop = meta.cropTop ?? 0;
+  const cropBottom = meta.cropBottom ?? 0;
+  const cropLeft = meta.cropLeft ?? 0;
+  const cropRight = meta.cropRight ?? 0;
+  const hasCrop = cropTop > 0 || cropBottom > 0 || cropLeft > 0 || cropRight > 0;
 
   return (
     <div
@@ -811,7 +846,8 @@ function PhotoEditorModal({
                 currentScale === 1 &&
                 currentBrightness === 1 &&
                 currentStretchX === 1 &&
-                currentStretchY === 1
+                currentStretchY === 1 &&
+                !hasCrop
               }
               className="px-3 py-2 rounded-md text-sm border border-zinc-700 text-zinc-400 hover:bg-zinc-800 transition disabled:opacity-40"
               title="清掉所有編輯"
@@ -918,6 +954,44 @@ function PhotoEditorModal({
                 ⟲
               </button>
             )}
+          </div>
+          {/* 裁切 — 4 邊 slider（0-45%）+ 整組重設 */}
+          <div className="mt-4 pt-3 border-t border-zinc-800">
+            <div className="flex items-center justify-between mb-2 px-1">
+              <span className="text-xs text-zinc-300 font-medium">✂ 裁切</span>
+              {hasCrop && (
+                <button
+                  onClick={resetCrop}
+                  className="text-[10px] text-zinc-500 hover:text-zinc-200 px-1.5 py-0.5 rounded hover:bg-zinc-800 transition"
+                >
+                  ⟲ 清除裁切
+                </button>
+              )}
+            </div>
+            {(['cropTop', 'cropBottom', 'cropLeft', 'cropRight'] as const).map((side) => {
+              const label = { cropTop: '上', cropBottom: '下', cropLeft: '左', cropRight: '右' }[side];
+              const value = meta[side] ?? 0;
+              return (
+                <div key={side} className="flex items-center gap-3 px-1 mt-1">
+                  <span className="text-[11px] text-zinc-500 w-6">{label}</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={0.45}
+                    step={0.01}
+                    value={value}
+                    onChange={(e) => setCrop(side, Number(e.target.value))}
+                    className="flex-1 accent-emerald-500"
+                  />
+                  <span className="tabular text-[10px] text-zinc-400 w-10 text-right">
+                    {Math.round(value * 100)}%
+                  </span>
+                </div>
+              );
+            })}
+            <p className="text-[10px] text-zinc-600 mt-2 px-1">
+              各邊 0~45%、裁掉的區域不顯示、剩下的撐滿 cell（縮放 + 平移）。
+            </p>
           </div>
           <p className="text-[11px] text-zinc-500 mt-3">
             所有編輯只存「設定」、不動原始檔。其他機從 NAS 拉到 sync.json 也會套用同樣設定。

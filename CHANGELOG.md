@@ -1,5 +1,47 @@
 # Changelog
 
+## v0.3.1 — 2026-05-12
+
+Stage B 實際 deploy 到 NAS Docker 跑通 + 「矯正追蹤」資料夾改名「0矯正追蹤」（排前面）。
+
+### Deploy 完成
+
+- D 機裝 Docker Desktop v29.4.3（修了 WSL 太舊問題 + ProgramData 殘留問題）
+- `docker build -t aligner-viewer:0.3.0 .` 成功（修了 `.dockerignore` 排除 dev-data 的 TS 編譯錯誤）
+- `docker save → aligner-viewer-0.3.0.tar` 47 MB
+- 上傳 NAS File Station → DSM Docker UI 載入 → container running
+- 內網訪問 `http://192.168.0.220:8080/`（外網擋、Stage B 設計就是 LAN-only）
+
+### 變動
+
+- **NAS share rename**：`n歐耐恩n/矯正追蹤` → `n歐耐恩n/0矯正追蹤`（user 為了排前面）
+- `server/index.js`：stripMasterPrefix 加 `0矯正追蹤` regex
+- `server/DEPLOY.md`：所有「矯正追蹤」改「0矯正追蹤」
+- `docker-compose.yml`：mount source 改 `0矯正追蹤`
+- `.dockerignore`：移除 `dev-data/` 排除（TypeScript 編譯需要 JSON import；runtime stage 不包 dev-data、不洩個資）
+
+### Build 變化
+
+- Build 時間 ~70s（包含 npm ci × 2 + vite build + 兩個 stage）
+- Final image: 200 MB on-disk / 49 MB tar
+- Container 跑起來 RAM <50 MB、CPU idle
+
+### Stage B 整體完成度
+
+| Session | 內容 | 狀態 |
+|:--|:--|:--|
+| 1 | server backend | ✅ |
+| 2 | frontend readOnly mode | ✅ |
+| 3 | Dockerfile + DEPLOY.md | ✅ |
+| 4 | 實際 build + deploy NAS | ✅（本版完成）|
+| 5 | 診所 wifi 內 iPad 測試 | ⏳ |
+
+### 後續
+
+- 等到診所 wifi 內測 iPad 開 `http://192.168.0.220:8080/` 看 readOnly App UI
+- 診所 master 機掛 W: + 推 sync.json 後、iPad 才會看到真實資料
+- 之前 mock 用 D 機 backup-2026-04-26-live.json 已驗證、預期 NAS 上換成 master 推的 sync.json 也 work
+
 ## v0.3.0 — 2026-05-12
 
 Stage B 開機：iPad 內網唯讀 web — server backend + frontend readOnly mode + Dockerfile + deployment SOP。

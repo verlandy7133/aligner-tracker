@@ -2061,21 +2061,32 @@ function ExcelImportSection() {
   );
 }
 
-/* ─── 補生日（從資料夾名 match 同名 patient）─────────────── */
+/* ─── 補生日 + 資料夾（從資料夾名 match 同名 patient）───────────
+ *   v0.4.3: 三項升級
+ *     1. 路徑改 dynamic dataRoot (原寫死 D:\矯正\、筆電會 fail)
+ *     2. 擴大掃描範圍：缺 birthday OR 缺 sourceFolder OR sourceFolder 包含舊 prefix
+ *     3. 只補「缺的欄位」、不覆蓋既有有效值
+ */
 function BirthdayBackfillSection() {
   const [state, setState] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
   const [error, setError] = useState('');
   const [result, setResult] = useState<{
     candidatesCount: number;
-    matched: { name: string; birthday: string; folder: string }[];
+    matched: {
+      name: string;
+      birthday: string | null;
+      folder: string;
+      patched: ('birthday' | 'sourceFolder')[];
+    }[];
     ambiguous: { name: string; folders: string[] }[];
     notFound: string[];
   } | null>(null);
 
-  const noBirthdayPatients =
+  // 候選 = 缺 birthday 或 缺 sourceFolder
+  const candidatePatients =
     useLiveQuery(async () => {
       const all = await db.patients.toArray();
-      return all.filter((p) => !p.birthday);
+      return all.filter((p) => !p.birthday || !p.sourceFolder);
     }) ?? [];
 
   async function go() {
@@ -2083,29 +2094,47 @@ function BirthdayBackfillSection() {
     setError('');
     setResult(null);
 
-    // 1. 讀目前 birthday=null 的病患
+    // 1. 拿當前 dataRoot
+    const pathsResult = await getPaths();
+    if (pathsResult.state !== 'ok' || !pathsResult.paths?.dataRoot) {
+      setError(
+        pathsResult.state === 'helper-down'
+          ? '本機 helper 沒回應'
+          : pathsResult.state === 'error'
+            ? pathsResult.message
+            : '找不到當前 dataRoot 設定',
+      );
+      setState('error');
+      return;
+    }
+    const folderRoot = pathsResult.paths.dataRoot.replace(/\\+$/, '') + '\\病患資料夾';
+
+    // 2. 讀候選病患（缺 birthday OR 缺 sourceFolder）
     const targets = await db.patients.toArray();
-    const noBirthday = targets.filter((p) => !p.birthday);
-    if (noBirthday.length === 0) {
-      setError('沒有缺生日的病患');
+    const candidates = targets.filter((p) => !p.birthday || !p.sourceFolder);
+    if (candidates.length === 0) {
+      setError('沒有缺生日或缺資料夾的病患');
       setState('error');
       return;
     }
 
-    // 2. helper 列病患資料夾所有 folder 名
-    // 用 D:\ 路徑，helper 會自動 path remap 到 C:\（如果在筆電）
-    const r = await listFolderNames('D:\\矯正\\病患資料夾');
+    // 3. helper 列資料夾
+    const r = await listFolderNames(folderRoot);
     if ('error' in r) {
-      setError(`列資料夾失敗：${r.error}`);
+      setError(`列資料夾失敗：${r.error}（${folderRoot}）`);
       setState('error');
       return;
     }
 
-    // 3. 對 folder 名解析、建 name → [folders] map
-    const nameToFolders = new Map<string, { name: string; birthday: string; raw: string }[]>();
+    // 4. 對 folder 名解析、建 name → [folders] map
+    //    這次保留「能 parse 出姓名但 birthday null」的、給「只缺 sourceFolder 不缺 birthday」case 用
+    const nameToFolders = new Map<
+      string,
+      { name: string; birthday: string | null; raw: string }[]
+    >();
     for (const folderName of r.names) {
       const parsed = parseFolderName(folderName);
-      if (!parsed.name || !parsed.birthday) continue;
+      if (!parsed.name) continue;
       if (!nameToFolders.has(parsed.name)) nameToFolders.set(parsed.name, []);
       nameToFolders.get(parsed.name)!.push({
         name: parsed.name,
@@ -2114,43 +2143,53 @@ function BirthdayBackfillSection() {
       });
     }
 
-    // 4. match
-    const matched: { name: string; birthday: string; folder: string }[] = [];
+    // 5. match + patch（只補空欄位、不蓋有效值）
+    const matched: {
+      name: string;
+      birthday: string | null;
+      folder: string;
+      patched: ('birthday' | 'sourceFolder')[];
+    }[] = [];
     const ambiguous: { name: string; folders: string[] }[] = [];
     const notFound: string[] = [];
-    const updates: { id: string; birthday: string; sourceFolder: string }[] = [];
 
-    for (const p of noBirthday) {
-      const candidates = nameToFolders.get(p.name);
-      if (!candidates || candidates.length === 0) {
-        notFound.push(p.name);
-        continue;
-      }
-      if (candidates.length > 1) {
-        ambiguous.push({ name: p.name, folders: candidates.map((c) => c.raw) });
-        continue;
-      }
-      const c = candidates[0];
-      matched.push({ name: p.name, birthday: c.birthday, folder: c.raw });
-      updates.push({
-        id: p.id,
-        birthday: c.birthday,
-        sourceFolder: `${r.folder}\\${c.raw}`,
-      });
-    }
-
-    // 5. 寫入 IndexedDB
     const nowIso = new Date().toISOString();
-    for (const u of updates) {
-      await db.patients.update(u.id, {
-        birthday: u.birthday,
-        sourceFolder: u.sourceFolder,
-        updatedAt: nowIso,
+    for (const p of candidates) {
+      const folders = nameToFolders.get(p.name);
+      if (!folders || folders.length === 0) {
+        notFound.push(`${p.chartNo} ${p.name}`);
+        continue;
+      }
+      if (folders.length > 1) {
+        ambiguous.push({ name: `${p.chartNo} ${p.name}`, folders: folders.map((c) => c.raw) });
+        continue;
+      }
+      const c = folders[0];
+      const patch: Partial<Patient> = { updatedAt: nowIso };
+      const patched: ('birthday' | 'sourceFolder')[] = [];
+      if (!p.birthday && c.birthday) {
+        patch.birthday = c.birthday;
+        patched.push('birthday');
+      }
+      if (!p.sourceFolder) {
+        patch.sourceFolder = `${r.folder.replace(/\\+$/, '')}\\${c.raw}`;
+        patched.push('sourceFolder');
+      }
+      if (patched.length === 0) {
+        // 該 patient 雖在 candidates、但實際沒缺的欄位能補（理論上不會發生、保險）
+        continue;
+      }
+      await db.patients.update(p.id, patch);
+      matched.push({
+        name: `${p.chartNo} ${p.name}`,
+        birthday: c.birthday,
+        folder: c.raw,
+        patched,
       });
     }
 
     setResult({
-      candidatesCount: noBirthday.length,
+      candidatesCount: candidates.length,
       matched,
       ambiguous,
       notFound,
@@ -2162,14 +2201,14 @@ function BirthdayBackfillSection() {
     <section className="rounded-xl border border-zinc-800 bg-zinc-900/30">
       <header className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-medium text-zinc-200">補生日（從資料夾名）</h2>
+          <h2 className="text-sm font-medium text-zinc-200">補生日 + 資料夾路徑（從資料夾名）</h2>
           <span className="text-xs text-zinc-500">
-            缺生日 {noBirthdayPatients.length} 人
+            候選 {candidatePatients.length} 人
           </span>
         </div>
         <button
           onClick={go}
-          disabled={state === 'running' || noBirthdayPatients.length === 0}
+          disabled={state === 'running' || candidatePatients.length === 0}
           className="px-3 py-1.5 rounded-md text-xs border border-zinc-700 text-zinc-200 hover:bg-zinc-800 transition disabled:opacity-50"
         >
           {state === 'running' ? '⏳ 處理中…' : '🎯 立即補上'}
@@ -2177,8 +2216,9 @@ function BirthdayBackfillSection() {
       </header>
       <div className="p-5 space-y-2 text-sm">
         <p className="text-xs text-zinc-500">
-          掃 <code className="text-zinc-400">D:\矯正\病患資料夾\</code> 找跟病患同名的資料夾，從資料夾名前 6-7 位民國年抽生日填回去。
-          同名多個 → 標 ambiguous 不動、由你手動處理。
+          掃 <code className="text-zinc-400">{'<資料根>\\病患資料夾\\'}</code> 找跟病患同姓名的資料夾、
+          幫缺 birthday / 缺 sourceFolder 的病患<strong className="text-zinc-300">補上空欄位</strong>（不蓋既有有效值）。
+          同名多筆 → 標 ambiguous 不動、由你手動處理。
         </p>
         {error && (
           <div className="px-3 py-2 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
@@ -2198,9 +2238,13 @@ function BirthdayBackfillSection() {
                   ▸ 補上清單 ({result.matched.length})
                 </summary>
                 <div className="mt-2 space-y-1 pl-3">
-                  {result.matched.slice(0, 50).map((m) => (
-                    <div key={m.folder} className="text-zinc-400">
-                      {m.name} → {m.birthday} · <span className="text-zinc-600">{m.folder}</span>
+                  {result.matched.slice(0, 50).map((m, i) => (
+                    <div key={`${m.folder}-${i}`} className="text-zinc-400">
+                      <span className="text-zinc-300">{m.name}</span>
+                      <span className="text-zinc-600 mx-1">→</span>
+                      <span className="text-emerald-400/80">補：{m.patched.join(' + ')}</span>
+                      {m.birthday && <span className="text-zinc-600 ml-1">({m.birthday})</span>}
+                      <span className="text-zinc-600 ml-1">· {m.folder}</span>
                     </div>
                   ))}
                   {result.matched.length > 50 && (

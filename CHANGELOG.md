@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.4.3 — 2026-05-13
+
+「補生日」section 升級為「補生日 + 資料夾路徑」、可批次修既有缺資料的病患。
+
+### 背景
+
+v0.4.2 解了「未來」Excel 匯入時自動 match 資料夾、但既有 IndexedDB 內已存在的
+缺生日/缺資料夾病患（例 0253 張敏泓 + 同名統計列出的 53 位）還是要逐筆手動修。
+這版升級現有 `BirthdayBackfillSection`、變成批次修補工具。
+
+### 變動（`BirthdayBackfillSection`）
+
+- **路徑改 dynamic dataRoot**：原寫死 `D:\矯正\病患資料夾`、筆電（W:）會 fail
+  - 改用 `getPaths()` 拿當前 dataRoot、組 `<dataRoot>\病患資料夾`
+- **候選範圍擴大**：原本只看「缺 birthday」、現在也看「缺 sourceFolder」
+  - 解 0253 case：有 birthday 但缺 sourceFolder 的也會被掃到（如果姓名能 match）
+  - 顯示「候選 N 人」（之前是「缺生日 N 人」）
+- **只補空欄位、不蓋有效值**：
+  - 病患 birthday 有 → 不動
+  - 病患 sourceFolder 有 → 不動（即使 dead、不會被亂蓋）
+  - 補上後在結果列表標示「補：birthday + sourceFolder」/「補：birthday」/「補：sourceFolder」
+- **標題改名**：「補生日（從資料夾名）」→「補生日 + 資料夾路徑（從資料夾名）」
+- **顯示加 chartNo**：matched / ambiguous / notFound 列表顯示「`0253 張敏泓`」更好辨識
+
+### 跟 v0.3.20「sourceFolder 健檢自動修復」差異
+
+| 工具 | 找什麼 | 修什麼 | 用什麼資料源 |
+|:--|:--|:--|:--|
+| **補生日+資料夾**（v0.4.3 升級）| 缺 birthday OR 缺 sourceFolder 的 patient | 從同姓名資料夾名抽出補進去 | `<資料根>\病患資料夾\` 實際 folder names |
+| **sourceFolder 健檢**（v0.3.20）| sourceFolder 有但實際指向不存在的 dead link | 從 `allSourceFolders` 找活路徑替換 | patient 自己歷史記錄 |
+
+兩個互補、各解一類問題。
+
 ## v0.4.2 — 2026-05-13
 
 Excel 匯入新病患時、自動掃資料夾、找同姓名 → 補生日 + sourceFolder。

@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.4.11 — 2026-05-14
+
+PhotoEditorModal 加小畫家風格的拖曳裁切框（CropOverlay）。
+
+### 變動
+
+- **新增 `CropOverlay` component**（在 `PatientNotesSection.tsx`）
+  - 蓋在 preview img 上、半透明黑 mask 顯示要裁掉的區域、中央 emerald 邊框 = 保留區
+  - 8 個 handle：4 角（resize 雙向）+ 4 邊（resize 單向）
+  - 中央 cursor:move、拖動整個 crop 框平移
+  - 用 `PointerEvent` 統一處理滑鼠 + 觸控、`setPointerCapture` 防止拖出元素失焦
+  - 邊界 guard：每邊 0~70%、對邊加總保證至少 5% visible
+- **`buildPhotoTransform` 加 `options.skipCrop`**：
+  - PhotoEditor preview 用 `skipCrop: true` 顯示完整 img、讓 CropOverlay 顯示框
+  - 其他地方（PhotoSlotCell）正常 transform、含 crop
+- preview container 加 `relative` + `select-none`、img 加 `pointer-events-none + draggable={false}`（讓拖曳事件走 overlay）
+
+### 雙向同步
+
+- 拖 overlay → 更新 `meta.cropTop/Bottom/Left/Right` → 4 個 slider 即時更新數字
+- 拖 slider → meta 更新 → overlay 重 render、框跟著移
+- 「⟲ 清除裁切」按鈕仍可用、重設四個 0
+
+### 已知 limitation
+
+- rotate ≠ 0 / flipH/V / imageStretch ≠ 1 時、overlay 座標跟視覺旋轉後的 img 不對齊（slider 還是可用）
+- 未來可加「rotate 時 disable overlay + 提示」、第一版先不處理
+
 ## v0.4.10 — 2026-05-14
 
 PhotoEditorModal 改成左右兩欄 layout — 照片預覽左、所有控制右。

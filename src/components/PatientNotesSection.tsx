@@ -440,28 +440,31 @@ function PhotoSlotGrid({ patient }: { patient: Patient }) {
 }
 
 /* ─── 計算 CSS transform 給 <img> 套用 ──────────────── */
-function buildPhotoTransform(meta: PhotoMeta | undefined): string {
+function buildPhotoTransform(meta: PhotoMeta | undefined, options?: { skipCrop?: boolean }): string {
   if (!meta) return '';
   const parts: string[] = [];
 
   // 裁切（最後 apply、視為「對 transformed img 進行裁切」）
   // CSS transform 從右到左 apply、所以 crop 寫在最前面字串、最後 apply
-  const cropTop = meta.cropTop ?? 0;
-  const cropBottom = meta.cropBottom ?? 0;
-  const cropLeft = meta.cropLeft ?? 0;
-  const cropRight = meta.cropRight ?? 0;
-  const visibleW = 1 - cropLeft - cropRight;
-  const visibleH = 1 - cropTop - cropBottom;
-  if (visibleW > 0.05 && visibleH > 0.05 && (cropTop || cropBottom || cropLeft || cropRight)) {
-    // 1. 把 cell 內的視野 scale 起來、保留區域撐滿
-    const cropScaleX = 1 / visibleW;
-    const cropScaleY = 1 / visibleH;
-    // 2. translate 把保留區域中心移到 cell 中心
-    //    保留區域中心相對 img 中心的偏移（百分比、img own dimension）
-    const cropOffsetXPct = ((cropRight - cropLeft) / 2) * 100;
-    const cropOffsetYPct = ((cropBottom - cropTop) / 2) * 100;
-    parts.push(`scale(${cropScaleX}, ${cropScaleY})`);
-    parts.push(`translate(${cropOffsetXPct}%, ${cropOffsetYPct}%)`);
+  // v0.4.11: skipCrop=true 時跳過、給 PhotoEditorModal 預覽用（show 完整 img + CropOverlay 顯示裁切框）
+  if (!options?.skipCrop) {
+    const cropTop = meta.cropTop ?? 0;
+    const cropBottom = meta.cropBottom ?? 0;
+    const cropLeft = meta.cropLeft ?? 0;
+    const cropRight = meta.cropRight ?? 0;
+    const visibleW = 1 - cropLeft - cropRight;
+    const visibleH = 1 - cropTop - cropBottom;
+    if (visibleW > 0.05 && visibleH > 0.05 && (cropTop || cropBottom || cropLeft || cropRight)) {
+      // 1. 把 cell 內的視野 scale 起來、保留區域撐滿
+      const cropScaleX = 1 / visibleW;
+      const cropScaleY = 1 / visibleH;
+      // 2. translate 把保留區域中心移到 cell 中心
+      //    保留區域中心相對 img 中心的偏移（百分比、img own dimension）
+      const cropOffsetXPct = ((cropRight - cropLeft) / 2) * 100;
+      const cropOffsetYPct = ((cropBottom - cropTop) / 2) * 100;
+      parts.push(`scale(${cropScaleX}, ${cropScaleY})`);
+      parts.push(`translate(${cropOffsetXPct}%, ${cropOffsetYPct}%)`);
+    }
   }
 
   // 順序：rotate → flipH → flipV → displayScale (等比) → imageStretchX/Y (非等比)
@@ -472,6 +475,157 @@ function buildPhotoTransform(meta: PhotoMeta | undefined): string {
   if (meta.imageStretchX && meta.imageStretchX !== 1) parts.push(`scaleX(${meta.imageStretchX})`);
   if (meta.imageStretchY && meta.imageStretchY !== 1) parts.push(`scaleY(${meta.imageStretchY})`);
   return parts.join(' ');
+}
+
+/* ─── 裁切 overlay（v0.4.11 新增、小畫家風格拖曳裁切）────────
+ *   蓋在 PhotoEditorModal preview img 上、顯示半透明 mask + 8 handle 拖曳框
+ *   拖中間 = 移動整個 crop 框
+ *   拖 4 角 / 4 邊 handle = 縮放對應方向
+ *   值跟 meta.cropTop/Bottom/Left/Right 雙向綁定、跟 4 個 slider 互通
+ *   注意：rotate ≠ 0 時座標 misalign、UI 上會提示用 slider
+ */
+type DragSide = 'tl' | 'tr' | 'bl' | 'br' | 't' | 'b' | 'l' | 'r' | 'move';
+
+function CropOverlay({
+  cropTop,
+  cropBottom,
+  cropLeft,
+  cropRight,
+  onChange,
+}: {
+  cropTop: number;
+  cropBottom: number;
+  cropLeft: number;
+  cropRight: number;
+  onChange: (next: { cropTop: number; cropBottom: number; cropLeft: number; cropRight: number }) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // 起始狀態用 ref 避免 closure stale
+  const dragStateRef = useRef<{
+    side: DragSide;
+    startX: number;
+    startY: number;
+    startCrop: { top: number; bottom: number; left: number; right: number };
+    rect: DOMRect;
+  } | null>(null);
+
+  function clamp(v: number, min: number, max: number) {
+    return Math.max(min, Math.min(max, v));
+  }
+
+  function handlePointerDown(side: DragSide, e: React.PointerEvent) {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    dragStateRef.current = {
+      side,
+      startX: e.clientX,
+      startY: e.clientY,
+      startCrop: { top: cropTop, bottom: cropBottom, left: cropLeft, right: cropRight },
+      rect,
+    };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function handlePointerMove(e: React.PointerEvent) {
+    const st = dragStateRef.current;
+    if (!st) return;
+    const dxPct = (e.clientX - st.startX) / st.rect.width;
+    const dyPct = (e.clientY - st.startY) / st.rect.height;
+    const { side, startCrop } = st;
+
+    let top = startCrop.top;
+    let bottom = startCrop.bottom;
+    let left = startCrop.left;
+    let right = startCrop.right;
+
+    // 各方向的影響：l/r/t/b/角 → 改對應邊；move → 同時移動
+    const MAX = 0.7; // 與 slider max 一致
+    const MIN_VISIBLE = 0.05; // 對邊加總不能 > 0.95、保留至少 5% 可視
+
+    if (side === 'l' || side === 'tl' || side === 'bl') {
+      left = clamp(startCrop.left + dxPct, 0, MAX);
+      if (1 - left - right < MIN_VISIBLE) left = 1 - right - MIN_VISIBLE;
+    }
+    if (side === 'r' || side === 'tr' || side === 'br') {
+      right = clamp(startCrop.right - dxPct, 0, MAX);
+      if (1 - left - right < MIN_VISIBLE) right = 1 - left - MIN_VISIBLE;
+    }
+    if (side === 't' || side === 'tl' || side === 'tr') {
+      top = clamp(startCrop.top + dyPct, 0, MAX);
+      if (1 - top - bottom < MIN_VISIBLE) top = 1 - bottom - MIN_VISIBLE;
+    }
+    if (side === 'b' || side === 'bl' || side === 'br') {
+      bottom = clamp(startCrop.bottom - dyPct, 0, MAX);
+      if (1 - top - bottom < MIN_VISIBLE) bottom = 1 - top - MIN_VISIBLE;
+    }
+    if (side === 'move') {
+      // 整體平移：crop 框相對位置不變、只平移
+      const w = 1 - startCrop.left - startCrop.right;
+      const h = 1 - startCrop.top - startCrop.bottom;
+      left = clamp(startCrop.left + dxPct, 0, 1 - w);
+      right = 1 - left - w;
+      top = clamp(startCrop.top + dyPct, 0, 1 - h);
+      bottom = 1 - top - h;
+    }
+
+    onChange({ cropTop: top, cropBottom: bottom, cropLeft: left, cropRight: right });
+  }
+
+  function handlePointerUp(e: React.PointerEvent) {
+    if (dragStateRef.current) {
+      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+      dragStateRef.current = null;
+    }
+  }
+
+  const visibleW = 1 - cropLeft - cropRight;
+  const visibleH = 1 - cropTop - cropBottom;
+  const cropRectStyle = {
+    top: `${cropTop * 100}%`,
+    left: `${cropLeft * 100}%`,
+    width: `${visibleW * 100}%`,
+    height: `${visibleH * 100}%`,
+  };
+
+  // handle 共用 style helper
+  const handleSize = 'w-3 h-3';
+  const handleClass = `absolute ${handleSize} bg-emerald-400 border border-emerald-200 shadow rounded-sm pointer-events-auto`;
+
+  return (
+    <div
+      ref={containerRef}
+      className="absolute inset-0 pointer-events-none"
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+    >
+      {/* 4 邊半透明黑 mask（用 4 個 div 圍出來、中央 crop 區透明）*/}
+      <div className="absolute bg-black/50 pointer-events-none" style={{ top: 0, left: 0, right: 0, height: `${cropTop * 100}%` }} />
+      <div className="absolute bg-black/50 pointer-events-none" style={{ bottom: 0, left: 0, right: 0, height: `${cropBottom * 100}%` }} />
+      <div className="absolute bg-black/50 pointer-events-none" style={{ top: `${cropTop * 100}%`, bottom: `${cropBottom * 100}%`, left: 0, width: `${cropLeft * 100}%` }} />
+      <div className="absolute bg-black/50 pointer-events-none" style={{ top: `${cropTop * 100}%`, bottom: `${cropBottom * 100}%`, right: 0, width: `${cropRight * 100}%` }} />
+
+      {/* crop rect 邊框 + 中央拖動區 */}
+      <div
+        className="absolute border-2 border-emerald-400 cursor-move pointer-events-auto"
+        style={cropRectStyle}
+        onPointerDown={(e) => handlePointerDown('move', e)}
+      >
+        {/* 8 handles — 4 角 + 4 邊 */}
+        <div className={`${handleClass} -top-1.5 -left-1.5 cursor-nwse-resize`} onPointerDown={(e) => handlePointerDown('tl', e)} />
+        <div className={`${handleClass} -top-1.5 -right-1.5 cursor-nesw-resize`} onPointerDown={(e) => handlePointerDown('tr', e)} />
+        <div className={`${handleClass} -bottom-1.5 -left-1.5 cursor-nesw-resize`} onPointerDown={(e) => handlePointerDown('bl', e)} />
+        <div className={`${handleClass} -bottom-1.5 -right-1.5 cursor-nwse-resize`} onPointerDown={(e) => handlePointerDown('br', e)} />
+        <div className={`${handleClass} -top-1.5 left-1/2 -translate-x-1/2 cursor-ns-resize`} onPointerDown={(e) => handlePointerDown('t', e)} />
+        <div className={`${handleClass} -bottom-1.5 left-1/2 -translate-x-1/2 cursor-ns-resize`} onPointerDown={(e) => handlePointerDown('b', e)} />
+        <div className={`${handleClass} -left-1.5 top-1/2 -translate-y-1/2 cursor-ew-resize`} onPointerDown={(e) => handlePointerDown('l', e)} />
+        <div className={`${handleClass} -right-1.5 top-1/2 -translate-y-1/2 cursor-ew-resize`} onPointerDown={(e) => handlePointerDown('r', e)} />
+      </div>
+    </div>
+  );
 }
 
 /* ─── 計算 CSS filter 給 <img> 套用（亮度等）──────── */
@@ -702,7 +856,8 @@ function PhotoEditorModal({
 }) {
   const [meta, setMeta] = useState<PhotoMeta>(initialMeta);
   const fullPath = `${patient.sourceFolder}\\${meta.filename}`;
-  const transform = buildPhotoTransform(meta);
+  // v0.4.11: preview img 不套 crop（讓 CropOverlay 顯示裁切框）；其他 transform 保留
+  const transform = buildPhotoTransform(meta, { skipCrop: true });
   const filter = buildPhotoFilter(meta);
 
   function rotate(delta: 90 | -90) {
@@ -797,12 +952,21 @@ function PhotoEditorModal({
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* 左欄 — 照片預覽 + 元資料提示 */}
             <div className="space-y-3">
-              <div className="aspect-[4/3] bg-zinc-900 rounded-md overflow-hidden flex items-center justify-center border border-zinc-800">
+              <div className="relative aspect-[4/3] bg-zinc-900 rounded-md overflow-hidden flex items-center justify-center border border-zinc-800 select-none">
                 <img
                   src={getImageUrl(fullPath)}
                   alt={slotLabel}
-                  className="max-w-full max-h-full object-contain transition-transform"
+                  draggable={false}
+                  className="max-w-full max-h-full object-contain transition-transform pointer-events-none"
                   style={{ transform, filter }}
+                />
+                {/* v0.4.11: CropOverlay — 小畫家風格拖曳裁切 */}
+                <CropOverlay
+                  cropTop={cropTop}
+                  cropBottom={cropBottom}
+                  cropLeft={cropLeft}
+                  cropRight={cropRight}
+                  onChange={(next) => setMeta({ ...meta, ...next })}
                 />
               </div>
               <p className="text-[11px] text-zinc-500 leading-relaxed">

@@ -34,6 +34,8 @@ export default function PatientList() {
   const [trackFilter, setTrackFilter] = useState<Set<NonNullable<PatientTrack>>>(new Set());
   const [refinementFilter, setRefinementFilter] = useState<Set<1 | 2 | 3>>(new Set());
   const [plFilter, setPlFilter] = useState<ProductLine | 'all'>('all');
+  // v0.4.1: 醫師 filter — 給醫師快速看自己病患的入口
+  const [doctorFilter, setDoctorFilter] = useState<string | 'all'>('all');
   const [sortField, setSortField] = useState<SortField>(DEFAULT_SORT.field);
   const [sortDir, setSortDir] = useState<SortDir>(DEFAULT_SORT.dir);
   const [modalTarget, setModalTarget] = useState<Patient | 'new' | null>(null);
@@ -79,6 +81,7 @@ export default function PatientList() {
     const pl: Record<string, number> = { all: patients.length };
     const track: Record<string, number> = { 'new-design': 0, 'old-design': 0, none: 0 };
     const refinement: Record<string, number> = { 1: 0, 2: 0, 3: 0 };
+    const doctor: Record<string, number> = {};
     for (const p of patients) {
       status[p.status] = (status[p.status] || 0) + 1;
       pl[p.productLine] = (pl[p.productLine] || 0) + 1;
@@ -86,15 +89,24 @@ export default function PatientList() {
       else if (p.track === 'old-design') track['old-design']++;
       else track.none++;
       if (p.refinementLevel >= 1 && p.refinementLevel <= 3) refinement[p.refinementLevel]++;
+      const d = p.doctor?.trim();
+      if (d) doctor[d] = (doctor[d] || 0) + 1;
     }
-    return { status, pl, track, refinement };
+    return { status, pl, track, refinement, doctor };
   }, [patients]);
+
+  // 醫師列表：按病患數降序、給醫師快速找到自己
+  const doctorList = useMemo(
+    () => Object.entries(counts.doctor).sort((a, b) => b[1] - a[1]).map(([d]) => d),
+    [counts.doctor],
+  );
 
   const isFiltered =
     statusFilter.size > 0 ||
     trackFilter.size > 0 ||
     refinementFilter.size > 0 ||
     plFilter !== 'all' ||
+    doctorFilter !== 'all' ||
     search.trim() !== '';
 
   function resetFilters() {
@@ -103,6 +115,7 @@ export default function PatientList() {
     setTrackFilter(new Set());
     setRefinementFilter(new Set());
     setPlFilter('all');
+    setDoctorFilter('all');
   }
 
   function toggleSetFilter<T>(setter: React.Dispatch<React.SetStateAction<Set<T>>>, value: T) {
@@ -135,6 +148,7 @@ export default function PatientList() {
         if (p.refinementLevel === 0 || !refinementFilter.has(p.refinementLevel as 1 | 2 | 3)) return false;
       }
       if (plFilter !== 'all' && p.productLine !== plFilter) return false;
+      if (doctorFilter !== 'all' && p.doctor?.trim() !== doctorFilter) return false;
       if (missingOrderOnly && !missingOrderIds.has(p.id)) return false;
       if (missingDoctorOnly && !missingDoctorIds.has(p.id)) return false;
       if (q) {
@@ -170,7 +184,7 @@ export default function PatientList() {
       }
     });
     return r;
-  }, [patients, search, statusFilter, trackFilter, refinementFilter, plFilter, sortField, sortDir, missingOrderOnly, missingOrderIds, missingDoctorOnly, missingDoctorIds]);
+  }, [patients, search, statusFilter, trackFilter, refinementFilter, plFilter, doctorFilter, sortField, sortDir, missingOrderOnly, missingOrderIds, missingDoctorOnly, missingDoctorIds]);
 
   return (
     <div className="space-y-5">
@@ -246,6 +260,25 @@ export default function PatientList() {
               />
             ))}
           </FilterGroup>
+          {doctorList.length > 0 && (
+            <FilterGroup label="醫師">
+              <Chip
+                active={doctorFilter === 'all'}
+                onClick={() => setDoctorFilter('all')}
+                label="全部"
+                count={patients.length}
+              />
+              {doctorList.map((d) => (
+                <Chip
+                  key={d}
+                  active={doctorFilter === d}
+                  onClick={() => setDoctorFilter(d)}
+                  label={d}
+                  count={counts.doctor[d]}
+                />
+              ))}
+            </FilterGroup>
+          )}
         </div>
 
         {/* Row 2: 設計 + 精調 */}

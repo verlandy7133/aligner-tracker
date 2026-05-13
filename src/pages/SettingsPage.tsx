@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
+import type { Patient } from '../types/Patient';
 import { rescanAndImport, type RescanResult } from '../lib/folder-rescan';
 import { reapplyExcelUpdates, type ReapplyResult } from '../lib/reapply-excel';
+import { mergePatients } from '../lib/merge-patients';
 import {
   downloadBackup,
   exportBackup,
@@ -88,6 +91,7 @@ export default function SettingsPage() {
           <RescanSection />
           <ExcelImportSection />
           <BirthdayBackfillSection />
+          <DuplicateNameSection />
           <DbSection />
         </>
       )}
@@ -2203,6 +2207,293 @@ function BirthdayBackfillSection() {
         )}
       </div>
     </section>
+  );
+}
+
+/* ─── 同名病患統計（v0.3.17 新增）─────────────────────────────
+ *   分兩類：
+ *     🔴 suspected = 同名 + 同生日 / 或同名 + 至少一筆缺生日（dedup miss、疑似重複）
+ *     🟡 homonym   = 同名 + 每筆生日都不同且非 null（真同名巧合）
+ *   每組可展開、列每筆 chartNo / 生日 / 醫師 / 來源資料夾、點任一筆跳病患詳細頁。
+ */
+type DupGroup = {
+  name: string;
+  list: Patient[];
+  kind: 'suspected' | 'homonym';
+};
+
+function classifyDupGroup(list: Patient[]): 'suspected' | 'homonym' {
+  // 看 (姓名, 生日) tuple 是否有重複、或是否有 null birthday
+  const seenBdays = new Set<string>();
+  let hasNull = false;
+  let hasDup = false;
+  for (const p of list) {
+    const bday = p.birthday ?? '';
+    if (!bday) hasNull = true;
+    else if (seenBdays.has(bday)) hasDup = true;
+    else seenBdays.add(bday);
+  }
+  return hasNull || hasDup ? 'suspected' : 'homonym';
+}
+
+function DuplicateNameSection() {
+  const allPatients = useLiveQuery(() => db.patients.toArray()) ?? [];
+
+  // 同名分組
+  const byName = new Map<string, Patient[]>();
+  for (const p of allPatients) {
+    const key = (p.name ?? '').trim();
+    if (!key) continue;
+    if (!byName.has(key)) byName.set(key, []);
+    byName.get(key)!.push(p);
+  }
+
+  const dupGroups: DupGroup[] = [...byName.entries()]
+    .filter(([, list]) => list.length > 1)
+    .map(([name, list]) => ({ name, list, kind: classifyDupGroup(list) }))
+    .sort((a, b) => {
+      // suspected 先、再依筆數多到少
+      if (a.kind !== b.kind) return a.kind === 'suspected' ? -1 : 1;
+      return b.list.length - a.list.length;
+    });
+
+  const suspected = dupGroups.filter((g) => g.kind === 'suspected');
+  const homonyms = dupGroups.filter((g) => g.kind === 'homonym');
+  const totalDupPatients = dupGroups.reduce((s, g) => s + g.list.length, 0);
+
+  return (
+    <section className="rounded-xl border border-zinc-800 bg-zinc-900/30">
+      <header className="px-5 py-3 border-b border-zinc-800">
+        <h2 className="text-sm font-medium text-zinc-200">同名病患統計</h2>
+      </header>
+      <div className="p-5 space-y-3 text-sm">
+        <p className="text-xs text-zinc-500 leading-relaxed">
+          掃描 IndexedDB 內所有病患、依姓名分組。<strong className="text-rose-300">疑似重複</strong>
+          通常是 dedup 比對失敗造成（生日缺漏 / 格式不一致），<strong className="text-amber-300">同名巧合</strong>
+          是真的不同人、不用處理。
+        </p>
+
+        <div className="grid grid-cols-3 gap-3 text-xs">
+          <StatBox label="同名組數" value={dupGroups.length} />
+          <StatBox label="🔴 疑似重複" value={suspected.length} tone="rose" />
+          <StatBox label="🟡 同名巧合" value={homonyms.length} tone="amber" />
+        </div>
+
+        {dupGroups.length === 0 && (
+          <div className="px-3 py-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs">
+            ✓ 沒有同名病患（總計 {allPatients.length} 位都是獨一無二的姓名）
+          </div>
+        )}
+
+        {suspected.length > 0 && (
+          <details className="text-xs" open>
+            <summary className="cursor-pointer text-rose-300 hover:text-rose-200 font-medium">
+              🔴 疑似重複（{suspected.length} 組 / 共 {suspected.reduce((s, g) => s + g.list.length, 0)} 筆）
+            </summary>
+            <div className="mt-2 space-y-2">
+              {suspected.map((g) => (
+                <DupGroupCard key={g.name} group={g} />
+              ))}
+            </div>
+          </details>
+        )}
+
+        {homonyms.length > 0 && (
+          <details className="text-xs">
+            <summary className="cursor-pointer text-amber-300 hover:text-amber-200 font-medium">
+              🟡 同名巧合（{homonyms.length} 組 / 共 {homonyms.reduce((s, g) => s + g.list.length, 0)} 筆）
+            </summary>
+            <div className="mt-2 space-y-2">
+              {homonyms.map((g) => (
+                <DupGroupCard key={g.name} group={g} />
+              ))}
+            </div>
+          </details>
+        )}
+
+        {dupGroups.length > 0 && (
+          <p className="text-[11px] text-zinc-600 leading-relaxed pt-1">
+            點 chartNo 跳到該病患詳細頁、或按組右上「🔗 合併此組」一鍵合併（會把下單轉到保留筆、空欄位互補、notes concat、然後刪掉多餘病患）。
+            <strong className="text-rose-400 block mt-1">
+              ⚠️ 合併不可復原 — 動作前建議先到「資料備份/還原」匯出 backup。
+            </strong>
+          </p>
+        )}
+
+        <p className="text-[11px] text-zinc-600 pt-1">
+          總共 {allPatients.length} 位病患、其中 {totalDupPatients} 筆牽涉同名（{((totalDupPatients / Math.max(allPatients.length, 1)) * 100).toFixed(1)}%）
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function StatBox({
+  label,
+  value,
+  tone = 'zinc',
+}: {
+  label: string;
+  value: number;
+  tone?: 'zinc' | 'rose' | 'amber';
+}) {
+  const toneCls =
+    tone === 'rose'
+      ? 'border-rose-500/30 bg-rose-500/5 text-rose-200'
+      : tone === 'amber'
+      ? 'border-amber-500/30 bg-amber-500/5 text-amber-200'
+      : 'border-zinc-700 bg-zinc-900/40 text-zinc-200';
+  return (
+    <div className={`rounded-md border px-3 py-2 ${toneCls}`}>
+      <div className="text-[10px] text-zinc-500">{label}</div>
+      <div className="text-lg font-semibold mt-0.5">{value}</div>
+    </div>
+  );
+}
+
+function DupGroupCard({ group }: { group: DupGroup }) {
+  // 同組內按 chartNo ASC 排序
+  const sorted = [...group.list].sort((a, b) => (a.chartNo ?? '').localeCompare(b.chartNo ?? ''));
+  const [mergeMode, setMergeMode] = useState(false);
+  const [keepId, setKeepId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  async function doMerge() {
+    if (!keepId) return;
+    const keep = sorted.find((p) => p.id === keepId);
+    if (!keep) return;
+    const toMerge = sorted.filter((p) => p.id !== keepId);
+
+    // 預先 count source 的 order 數，用於 confirm dialog
+    const orderCounts = await Promise.all(
+      toMerge.map((p) => db.orders.where('patientId').equals(p.id).count()),
+    );
+    const totalOrders = orderCounts.reduce((s, c) => s + c, 0);
+
+    const lines = [
+      `確定要合併下列病患？`,
+      ``,
+      `★ 保留：${keep.chartNo} ${keep.name}（${keep.birthday ?? '無生日'}）`,
+      ...toMerge.map(
+        (p, i) =>
+          `✗ 刪除：${p.chartNo} ${p.name}（${p.birthday ?? '無生日'}）— ${orderCounts[i]} 筆下單`,
+      ),
+      ``,
+      `動作：把 ${totalOrders} 筆下單轉到保留筆 → target 空欄位從 source 補 → notes 合併 → 刪除其他病患`,
+      ``,
+      `⚠️ 不可復原（建議先「資料備份/還原」匯出 backup 再執行）`,
+    ];
+    if (!confirm(lines.join('\n'))) return;
+
+    setBusy(true);
+    setMsg(null);
+    try {
+      let totalTransferred = 0;
+      const mergedFields = new Set<string>();
+      for (const src of toMerge) {
+        const r = await mergePatients(src.id, keepId);
+        totalTransferred += r.ordersTransferred;
+        r.fieldsMerged.forEach((f) => mergedFields.add(f));
+      }
+      const fieldsText = mergedFields.size > 0 ? `、補欄位 ${[...mergedFields].join('/')}` : '';
+      setMsg({
+        kind: 'ok',
+        text: `✓ 完成：${toMerge.length} 筆併入「${keep.chartNo} ${keep.name}」、轉移 ${totalTransferred} 筆下單${fieldsText}`,
+      });
+      setMergeMode(false);
+      setKeepId(null);
+    } catch (e) {
+      setMsg({
+        kind: 'err',
+        text: `✗ 失敗：${e instanceof Error ? e.message : String(e)}`,
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-md border border-zinc-800 bg-zinc-950/40 p-2.5">
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="text-zinc-200 font-medium">
+          {group.name}{' '}
+          <span className="text-zinc-500 text-[10px]">({group.list.length} 筆)</span>
+        </div>
+        {!busy && (
+          <button
+            onClick={() => {
+              setMergeMode(!mergeMode);
+              setKeepId(null);
+              setMsg(null);
+            }}
+            className="text-[11px] text-rose-300 hover:text-rose-200 px-2 py-0.5 rounded hover:bg-rose-500/10"
+          >
+            {mergeMode ? '✗ 取消合併' : '🔗 合併此組'}
+          </button>
+        )}
+      </div>
+      <div className="space-y-1">
+        {sorted.map((p) => (
+          <div key={p.id} className="flex items-center gap-2">
+            {mergeMode && (
+              <input
+                type="radio"
+                name={`keep-${group.name}`}
+                checked={keepId === p.id}
+                onChange={() => setKeepId(p.id)}
+                disabled={busy}
+                className="accent-emerald-500 cursor-pointer"
+                title="勾選 = 保留這筆、其他併進來"
+              />
+            )}
+            <Link
+              to={`/patients/${p.id}`}
+              className="flex-1 flex items-center gap-3 px-2 py-1 rounded hover:bg-zinc-800/60 transition group"
+            >
+              <span className="font-mono text-sky-300 group-hover:text-sky-200 min-w-[3em]">
+                {p.chartNo}
+              </span>
+              <span className="text-zinc-400 min-w-[6em] text-[11px]">
+                {p.birthday ?? <span className="text-rose-400">⚠ 無生日</span>}
+              </span>
+              <span className="text-zinc-500 text-[11px] min-w-[5em]">{p.doctor ?? '—'}</span>
+              <span
+                className="text-zinc-600 text-[10px] truncate flex-1"
+                title={p.sourceFolder ?? ''}
+              >
+                {p.sourceFolder ?? '—'}
+              </span>
+            </Link>
+          </div>
+        ))}
+      </div>
+      {mergeMode && (
+        <div className="mt-2 flex items-center gap-3 px-2">
+          <span className="text-[11px] text-zinc-500 flex-1">
+            勾選要「保留」的那筆 → 其他會合併進來、原 chartNo 會刪除
+          </span>
+          <button
+            onClick={doMerge}
+            disabled={!keepId || busy}
+            className="px-2.5 py-1 rounded bg-rose-600/20 border border-rose-500/50 text-rose-200 text-[11px] hover:bg-rose-600/30 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {busy ? '合併中…' : '執行合併'}
+          </button>
+        </div>
+      )}
+      {msg && (
+        <div
+          className={`mt-2 px-2.5 py-1.5 rounded text-[11px] ${
+            msg.kind === 'ok'
+              ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-200'
+              : 'bg-rose-500/10 border border-rose-500/30 text-rose-200'
+          }`}
+        >
+          {msg.text}
+        </div>
+      )}
+    </div>
   );
 }
 

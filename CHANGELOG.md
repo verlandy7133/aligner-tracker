@@ -1,5 +1,52 @@
 # Changelog
 
+## v0.3.18 — 2026-05-13
+
+「同名病患統計」加一鍵合併功能。
+
+### 背景
+
+v0.3.17 列出疑似重複後，主上反映：「資料夾名打錯造成的兩筆、我把資料夾名改好了、但 App 內還是兩筆」。
+資料夾改名 ≠ IndexedDB 內 patient 改名，需要 App 提供合併動作。
+
+### 新增
+
+- **`lib/merge-patients.ts`**：transactional merge
+  - 把 source 的所有 `order.patientId` 轉到 target（同步更新 denormalized patientChartNo / patientName）
+  - target 空欄位從 source 補：birthday / doctor / scanInfo / totalAligners* / hasConsent / consentPdfPath
+  - notes / markdownNote 直接 concat、加分隔行標記來源
+  - allSourceFolders 把 source 的資料夾路徑加進去（保留歷史足跡）
+  - 最後刪除 source patient
+  - **不動的欄位**：photos / sourceFolder / chartNo / track / refinementLevel（避免破壞 target 已編輯）
+- **`DupGroupCard` 加合併 UI**：
+  - 每組右上「🔗 合併此組」按鈕進入合併模式
+  - 每筆出現 radio button，勾「保留」那筆
+  - 按「執行合併」→ confirm dialog 列出要保留 / 要刪 / 要轉的 order 數 → 執行
+  - 完成顯示綠色卡片、列出轉移筆數 + merge 了哪些欄位
+- 更新文案、提醒先做 backup（不可復原）
+
+## v0.3.17 — 2026-05-13
+
+設定頁加「同名病患統計」section、幫助找 dedup miss 造成的重複病患。
+
+### 新增
+
+- **`DuplicateNameSection`**：掃 IndexedDB 全 patient、依姓名分組找同名
+- **分兩類顯示**：
+  - 🔴 **疑似重複**：同名 + 同生日 OR 同名 + 至少一筆缺生日（dedup miss、該處理）
+  - 🟡 **同名巧合**：同名但每筆生日都不同（真不同人、不用處理）
+- **每組可展開**：列每筆 chartNo / 生日 / 醫師 / sourceFolder
+- **點 chartNo 跳病患詳細頁**（用 react-router Link）
+- 含「疑似重複處理建議」4 步驟手動 merge 流程說明
+
+### 背景
+
+v0.3.14 推完後在筆電發現 `0001/0363 蘇茁濼`、`0002/0364 鄧宛唏` 等同名雙筆。
+root cause：早期 seed 按「最早下單日」編 chartNo (0001-0009)、後期資料夾掃描補進的用 placeholder chartNo (0300+)；
+dedup key `name+birthday` 在某些筆生日缺漏時 miss → 沒擋住、雙筆並存。
+
+v1 不做一鍵 merge（避免誤砍歷史），只統計 + 跳轉。手動 merge 流程在 UI 說明。
+
 ## v0.3.16 — 2026-05-13
 
 修 master 角色更新失敗的根本問題 + 補 python 套件自動裝。

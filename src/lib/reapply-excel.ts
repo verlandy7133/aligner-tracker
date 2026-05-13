@@ -233,14 +233,20 @@ export async function reapplyExcelUpdates(): Promise<ReapplyResult> {
     }
 
     // v0.4.2: 沒生日 / 沒 sourceFolder → 嘗試從 folderMap 找唯一同姓名 match
+    // v0.4.7: autoMatched 只在「實際補到欄位」時才標 true（避免統計失準）
     let autoMatched = false;
     if (np.name && (!np.birthday || !np.sourceFolder)) {
       const matches = folderMap.get(np.name) ?? [];
       if (matches.length === 1) {
         const m = matches[0];
-        if (!np.birthday && m.birthday) np.birthday = m.birthday;
-        if (!np.sourceFolder && m.folderPath) np.sourceFolder = m.folderPath;
-        autoMatched = true;
+        if (!np.birthday && m.birthday) {
+          np.birthday = m.birthday;
+          autoMatched = true;
+        }
+        if (!np.sourceFolder && m.folderPath) {
+          np.sourceFolder = m.folderPath;
+          autoMatched = true;
+        }
       }
       // 2+ matches: 不動、避免錯配（user 可在 sourceFolder 健檢 / 同名統計裡手動處理）
     }

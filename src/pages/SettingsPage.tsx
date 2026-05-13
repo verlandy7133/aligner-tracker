@@ -2865,7 +2865,7 @@ type RepairCandidate = {
 };
 
 function SourceFolderHealthSection() {
-  const allPatients = useLiveQuery(() => db.patients.toArray()) ?? [];
+  // v0.4.7: 移除 useLiveQuery — UI 內沒用到、go() 改成直接 await db.patients.toArray()
   const [state, setState] = useState<'idle' | 'checking' | 'done' | 'error'>('idle');
   const [deadLinks, setDeadLinks] = useState<DeadLink[]>([]);
   const [repairs, setRepairs] = useState<RepairCandidate[]>([]);
@@ -2885,10 +2885,15 @@ function SourceFolderHealthSection() {
     setRepairs([]);
     setStats(null);
 
+    // v0.4.7: 直接抓最新、不依賴 useLiveQuery 的 stale closure
+    //   原本用 `allPatients` (component-level useLiveQuery)、
+    //   `applyAllRepairs` 完 `await go()` 時 closure 抓的還是修復前的 snapshot。
+    const freshPatients = await db.patients.toArray();
+
     // 集合所有要檢查的路徑、用 Map 對應到 patient + field
     const pathMap = new Map<string, { patient: Patient; field: 'sourceFolder' | 'consentPdfPath' }[]>();
     let noSourceFolderCount = 0;
-    for (const p of allPatients) {
+    for (const p of freshPatients) {
       if (!p.sourceFolder) noSourceFolderCount++;
       else {
         if (!pathMap.has(p.sourceFolder)) pathMap.set(p.sourceFolder, []);
@@ -2903,7 +2908,7 @@ function SourceFolderHealthSection() {
     const allPaths = [...pathMap.keys()];
     if (allPaths.length === 0) {
       setStats({
-        totalPatients: allPatients.length,
+        totalPatients: freshPatients.length,
         totalPaths: 0,
         deadCount: 0,
         noSourceFolderCount,
@@ -2969,12 +2974,25 @@ function SourceFolderHealthSection() {
     setDeadLinks(dead);
     setRepairs(repairCandidates);
     setStats({
-      totalPatients: allPatients.length,
+      totalPatients: freshPatients.length,
       totalPaths: allPaths.length,
       deadCount: dead.length,
       noSourceFolderCount,
     });
     setState('done');
+  }
+
+  // v0.4.7: 修復時把 oldPath（dead）保留進 allSourceFolders、
+  // 跟 confirm dialog 文案「原 dead 路徑會保留」一致、不丟歷史。
+  async function patchSourceFolder(r: RepairCandidate, nowIso: string) {
+    const merged = new Set<string>(r.patient.allSourceFolders ?? []);
+    if (r.oldPath) merged.add(r.oldPath); // 保留 dead 歷史
+    merged.add(r.newPath); // 確保 new 在
+    await db.patients.update(r.patient.id, {
+      sourceFolder: r.newPath,
+      allSourceFolders: [...merged],
+      updatedAt: nowIso,
+    });
   }
 
   async function applyAllRepairs() {
@@ -2991,12 +3009,9 @@ function SourceFolderHealthSection() {
     try {
       const nowIso = new Date().toISOString();
       for (const r of repairs) {
-        await db.patients.update(r.patient.id, {
-          sourceFolder: r.newPath,
-          updatedAt: nowIso,
-        });
+        await patchSourceFolder(r, nowIso);
       }
-      // 完成後立刻重跑一次健檢
+      // 完成後立刻重跑一次健檢（go 內部會 await db.patients.toArray() 抓最新、不受 closure 影響）
       await go();
     } finally {
       setBusy(false);
@@ -3007,10 +3022,7 @@ function SourceFolderHealthSection() {
     if (!confirm(`把 ${r.patient.chartNo} ${r.patient.name} 的 sourceFolder 改成：\n\n${r.newPath}\n\n原 dead 路徑會保留在 allSourceFolders 內。`)) return;
     setBusy(true);
     try {
-      await db.patients.update(r.patient.id, {
-        sourceFolder: r.newPath,
-        updatedAt: new Date().toISOString(),
-      });
+      await patchSourceFolder(r, new Date().toISOString());
       await go();
     } finally {
       setBusy(false);

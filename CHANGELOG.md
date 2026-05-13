@@ -1,5 +1,68 @@
 # Changelog
 
+## v0.4.7 — 2026-05-13
+
+深度 code review 修 4 個 bug + 1 個 minor。今天的工具 ship 太快、自我盤點抓出。
+
+### Bug 1 — `merge-patients.ts` allSourceFolders 遺失 target.sourceFolder
+
+之前：
+```ts
+const existingFolders = new Set<string>(
+  target.allSourceFolders ?? [target.sourceFolder].filter(Boolean),
+);
+```
+若 `target.allSourceFolders` 已存在但不包含 `target.sourceFolder`、`??` 不會 fallback、
+existingFolders 不會加入 target.sourceFolder → 合併後寫回的 allSourceFolders 遺失它。
+
+**修法**：分兩步建集合 — 先收 target 既有所有 path、再加 source 的、保證 target.sourceFolder 不丟。
+
+### Bug 2 — sourceFolder 健檢自動修復沒保留 dead oldPath
+
+`applyAllRepairs` / `applyOneRepair` 的 confirm dialog 寫「原 dead 路徑會保留在 allSourceFolders 內」、
+但實際 update 只改 sourceFolder、沒把 oldPath 加進 allSourceFolders。
+
+**修法**：抽出 `patchSourceFolder(r, nowIso)` helper、同時 update 兩個欄位（含 oldPath）。
+
+### Bug 3 — sourceFolder 健檢 `go()` 用 stale closure
+
+`SourceFolderHealthSection` 的 `go()` 用 component-level `useLiveQuery` 的 `allPatients`、
+`applyAllRepairs` 完 `await go()` 重跑時 closure 抓的是修復前的 snapshot、結果不準。
+
+**修法**：`go()` 內改 `await db.patients.toArray()` 直接抓最新、不依賴 useLiveQuery 變數。
+（其他三個 section — BirthdayBackfill / DoctorBackfill / DuplicateName — 已正確、不用改）
+
+### Bug 4 — `PatientDetailPage` 切 sourceFolder 沒保留歷史
+
+✏ 編輯 / ✓ 設為主 兩個 button 只 update `sourceFolder`、沒把舊路徑加進 `allSourceFolders`。
+若舊路徑不在 allSourceFolders 內、切完就永久消失。
+
+**修法**：兩個 onClick 都改成同時 update 兩欄位、舊路徑加進 set。
+
+### Bug 5 — `reapply-excel` autoMatched 統計失準（minor）
+
+```ts
+if (matches.length === 1) {
+  if (!np.birthday && m.birthday) np.birthday = ...;
+  if (!np.sourceFolder && m.folderPath) np.sourceFolder = ...;
+  autoMatched = true;  // ← 即使兩個 if 都沒進、還是 true
+}
+```
+
+**修法**：只在實際補進欄位時才標 true（每個 if 內各自 set）。
+
+### 共通教訓
+
+四個 bug 中 #1/2/3/4 都跟「**不要遺失 sourceFolder 歷史**」有關 — 一致的設計疏漏。
+今天 v0.3.18/3.20/4.2 三個 PR 都觸到 allSourceFolders、但邏輯沒對齊。
+盤點抓出後、四個位置統一用 `new Set(...).add(...)` pattern。
+
+### 沒修的（known limitation）
+
+- DupGroupCard 合併成功訊息瞬間閃過（component unmount） — UX
+- v0.4.5 Excel fallback build snapshot 跨機後過時
+- sourceFolder 健檢結果依機器而異
+
 ## v0.4.6 — 2026-05-13
 
 修：醫師 filter + 「未登記醫師」warning 互斥不互清的 UX bug。

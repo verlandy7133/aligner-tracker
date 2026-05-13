@@ -107,14 +107,16 @@ export async function mergePatients(
     }
 
     // 4. allSourceFolders: 把 source 的 sourceFolder 也記入 target.allSourceFolders
-    const existingFolders = new Set<string>(
-      target.allSourceFolders ?? [target.sourceFolder].filter(Boolean),
-    );
-    if (source.sourceFolder) existingFolders.add(source.sourceFolder);
-    for (const f of source.allSourceFolders ?? []) existingFolders.add(f);
-    const mergedFolders = [...existingFolders];
-    if (mergedFolders.length > (target.allSourceFolders?.length ?? 0)) {
-      patch.allSourceFolders = mergedFolders;
+    //    v0.4.7 修：之前用 `target.allSourceFolders ?? [target.sourceFolder]` 結構不對
+    //    — 如果 target.allSourceFolders 已存在但不含 target.sourceFolder、會遺失 target.sourceFolder。
+    //    改用「先收 target 既有的所有 path、再加 source 的」、確保 target.sourceFolder 不會丟。
+    const oldFoldersSize = (target.allSourceFolders ?? []).length;
+    const mergedSet = new Set<string>(target.allSourceFolders ?? []);
+    if (target.sourceFolder) mergedSet.add(target.sourceFolder);
+    if (source.sourceFolder) mergedSet.add(source.sourceFolder);
+    for (const f of source.allSourceFolders ?? []) mergedSet.add(f);
+    if (mergedSet.size > oldFoldersSize) {
+      patch.allSourceFolders = [...mergedSet];
       result.fieldsMerged.push('allSourceFolders');
     }
 

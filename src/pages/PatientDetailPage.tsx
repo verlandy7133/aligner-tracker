@@ -341,8 +341,13 @@ export default function PatientDetailPage() {
               );
               if (newPath === null) return; // 取消
               const trimmed = newPath.trim();
+              // v0.4.7: 把舊 sourceFolder 加進 allSourceFolders 保留歷史
+              const merged = new Set<string>(patient.allSourceFolders ?? []);
+              if (patient.sourceFolder) merged.add(patient.sourceFolder);
+              if (trimmed) merged.add(trimmed);
               await db.patients.update(patient.id, {
                 sourceFolder: trimmed,
+                allSourceFolders: [...merged],
                 updatedAt: new Date().toISOString(),
               });
             }}
@@ -366,8 +371,13 @@ export default function PatientDetailPage() {
                     <button
                       onClick={async () => {
                         if (!confirm(`把這條設為主 sourceFolder？\n\n${p}`)) return;
+                        // v0.4.7: 把舊 sourceFolder 加進 allSourceFolders 保留歷史
+                        const merged = new Set<string>(patient.allSourceFolders ?? []);
+                        if (patient.sourceFolder) merged.add(patient.sourceFolder);
+                        merged.add(p);
                         await db.patients.update(patient.id, {
                           sourceFolder: p,
+                          allSourceFolders: [...merged],
                           updatedAt: new Date().toISOString(),
                         });
                       }}

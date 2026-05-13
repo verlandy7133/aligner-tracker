@@ -779,8 +779,8 @@ function PhotoEditorModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl flex flex-col">
-        <header className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between">
+      <div className="w-full max-w-2xl max-h-[90vh] bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl flex flex-col">
+        <header className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between flex-shrink-0">
           <div>
             <h3 className="text-lg font-semibold text-zinc-100">編輯 — {slotLabel}</h3>
             <p className="text-xs text-zinc-500 mt-1 font-mono">{meta.filename}</p>
@@ -792,7 +792,8 @@ function PhotoEditorModal({
             ×
           </button>
         </header>
-        <div className="p-6">
+        {/* v0.4.9: content 區可滾動、modal 限 90vh、footer 自動 sticky 在底部 */}
+        <div className="p-6 overflow-y-auto flex-1 min-h-0">
           {/* preview */}
           <div className="aspect-[4/3] bg-zinc-900 rounded-md overflow-hidden flex items-center justify-center mb-4 border border-zinc-800">
             <img
@@ -1002,7 +1003,7 @@ function PhotoEditorModal({
             旋轉 {meta.rotate ?? 0}° · 水平翻轉 {meta.flipH ? '是' : '否'} · 垂直翻轉 {meta.flipV ? '是' : '否'} · 縮放 {Math.round(currentScale * 100)}% · 亮度 {Math.round(currentBrightness * 100)}%
           </p>
         </div>
-        <footer className="px-6 py-3 border-t border-zinc-800 flex items-center justify-end gap-2">
+        <footer className="px-6 py-3 border-t border-zinc-800 flex items-center justify-end gap-2 flex-shrink-0">
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-md text-sm border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition"

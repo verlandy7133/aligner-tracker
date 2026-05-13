@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.4.9 — 2026-05-14
+
+修：照片編輯 modal 太高、footer (儲存/取消) 被 viewport 截掉看不到。
+
+### 背景
+
+主上 v0.4.8 修完 disabled 邏輯後仍反映「還是看不到 這個頁面太大了」。
+PhotoEditorModal 內容很長（照片預覽 + 4 個 transform slider + 4 個 crop slider + 提示文字）、
+之前 modal box 沒設 max-height、整個容器撐到溢出 viewport、footer 被擠到看不到位置。
+
+對照其他兩個 modal（PhotoPickerModal / PhotoAIPickerModal）早就有 `max-h-[85vh]` +
+`flex-1 overflow-y-auto` 的標準 pattern — 只有 PhotoEditorModal 漏。
+
+### 變動（`PhotoEditorModal`）
+
+- modal box 加 `max-h-[90vh]`
+- content 區改 `overflow-y-auto flex-1 min-h-0`（`min-h-0` 重要、否則 flex item 不會 shrink、scroll 不生效）
+- header / footer 加 `flex-shrink-0` 確保不被擠
+- 結果：modal 高度永遠不超過 viewport、footer 永遠看得到、中間區可滾動
+
 ## v0.4.8 — 2026-05-13
 
 修：照片編輯 modal 沒改任何東西時「儲存」按鈕灰色 disabled、user 不知道為什麼點不下去。

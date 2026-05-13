@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.3.21 — 2026-05-13
+
+匯出備份同時寫一份到 NAS、不只本機下載。
+
+### 變動（`BackupSection`）
+
+- **「⬇ 匯出備份」按下後做兩件事**：
+  1. 本機瀏覽器下載（原本行為）
+  2. 透過 helper 寫一份到 `<資料根>\app-backups\manual-{ISO 時間}.json`
+- NAS 寫入是 best effort — 失敗不擋本機下載、只在結果訊息顯示警告
+- 結果訊息分兩行 ✓ 顯示「本機路徑」+「NAS 路徑」、或對應 ⚠ 警告
+- 更新說明文字明確標示 NAS 備份位置
+
+### 為什麼
+
+樓上樓下兩台機、原本「匯出備份」只能下載到當前操作的那台筆電本機。
+跨機協作下、user 經常忘記把本機下載的 backup 上傳到 NAS 共享、
+NAS 上只有 update 切版時的 `pre-switch-*.json` 自動備份。
+這版讓手動備份也一起進 NAS、之後恢復不論在哪台都看得到。
+
+### 命名 convention
+
+- `pre-switch-{fromVer}-to-{target}-{date}.json` — update.ps1 切版本前自動寫（v0.3.x+）
+- `manual-{date}.json` — 此版新增、user 按「⬇ 匯出備份」時自動寫
+
 ## v0.3.20 — 2026-05-13
 
 修補：合併後 sourceFolder 沒升級到活路徑、加自動修復 + 手動編輯入口。

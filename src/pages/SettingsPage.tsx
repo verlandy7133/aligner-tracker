@@ -1618,11 +1618,36 @@ function BackupSection() {
   async function handleExport() {
     setExporting(true);
     setError('');
+    setDoneMsg('');
     try {
-      const backup = await exportBackup();
+      // v0.3.21: 同時做兩件事 — 本機下載 + 寫一份到 <dataRoot>\app-backups\
+      //   1. dataRoot 用於 normalize path（跨機還原 OK）
+      //   2. 本機下載先做（瀏覽器原生行為、不會失敗）
+      //   3. NAS 寫入是 best effort — 失敗不擋本機下載、只顯示提示
+      const dataRoot = await fetchDataRoot().catch(() => '');
+      const backup = await exportBackup(dataRoot || undefined);
+
+      // 步驟 2: 本機下載
       downloadBackup(backup);
-      setDoneMsg(`✓ 已下載備份 (${backup.counts.patients} 病患 / ${backup.counts.orders} 下單 / ${backup.counts.settings} 設定)`);
-      setTimeout(() => setDoneMsg(''), 5000);
+
+      const counts = `${backup.counts.patients} 病患 / ${backup.counts.orders} 下單 / ${backup.counts.settings} 設定`;
+      let msg = `✓ 已下載到本機 (${counts})`;
+
+      // 步驟 3: 寫到 NAS（best effort）
+      const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const filename = `manual-${dateStr}.json`;
+      const json = JSON.stringify(backup, null, 2);
+      const wb = await writeBackup(filename, json);
+      if (wb.state === 'ok') {
+        msg += `\n✓ 已存到 NAS：${wb.path}`;
+      } else if (wb.state === 'helper-down') {
+        msg += `\n⚠ NAS 備份跳過：本機 helper 沒回應`;
+      } else {
+        msg += `\n⚠ NAS 備份失敗：${wb.message}`;
+      }
+
+      setDoneMsg(msg);
+      setTimeout(() => setDoneMsg(''), 10000);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -1699,8 +1724,9 @@ function BackupSection() {
       </header>
       <div className="p-5 space-y-2 text-sm">
         <p className="text-xs text-zinc-500">
-          匯出 = 把所有病患、下單、設定打包成 JSON 檔下載到本機（建議每月做一次）。
-          匯入 = 從備份還原，**會完全覆寫現有資料**。
+          匯出 = 打包所有病患/下單/設定成 JSON、<strong className="text-zinc-300">同時下載到本機 + 寫一份到 NAS</strong>{' '}
+          <code className="text-zinc-400">&lt;資料根&gt;\app-backups\manual-(時間).json</code>（建議每月做一次）。
+          匯入 = 從備份還原、<strong className="text-rose-300">會完全覆寫現有資料</strong>。
         </p>
         {doneMsg && (
           <div className="px-3 py-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">

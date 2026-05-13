@@ -11,6 +11,8 @@
 
 import { db } from '../db';
 import type { Order, Patient } from '../types/Patient';
+import { getPaths, listFolderNames } from './helper-client';
+import { parseFolderName } from './parse-folder-name';
 
 // 從 alignerRange 字串解出「這批下單包含的副數」上下顎最大值。
 // 支援格式：
@@ -69,7 +71,7 @@ export type ReapplyResult = {
     skippedNotFound: number;
     skippedAllSet: number;
   };
-  newPatients: { added: number; skippedExisted: number };
+  newPatients: { added: number; skippedExisted: number; matchedFromFolder: number };
   orders: { added: number; skippedExisted: number };
   derivedCurrent: { patientsUpdated: number };
 };
@@ -106,7 +108,7 @@ export async function reapplyExcelUpdates(): Promise<ReapplyResult> {
       skippedNotFound: 0,
       skippedAllSet: 0,
     },
-    newPatients: { added: 0, skippedExisted: 0 },
+    newPatients: { added: 0, skippedExisted: 0, matchedFromFolder: 0 },
     orders: { added: 0, skippedExisted: 0 },
     derivedCurrent: { patientsUpdated: 0 },
   };
@@ -191,6 +193,33 @@ export async function reapplyExcelUpdates(): Promise<ReapplyResult> {
     result.updates.patientsPatched++;
   }
 
+  // v0.4.2: 為了給新病患自動補生日 + sourceFolder、先掃 <dataRoot>\病患資料夾 構建 folderMap
+  //   key = 解析出的姓名、value = [{birthday, folderPath}, ...]
+  //   helper 沒回應或抓不到 dataRoot → folderMap 留空、新病患就跟以前一樣缺生日（不影響主邏輯）
+  //   只在 1 個唯一 match 時自動套；多 match (同名) → 留給 user 手動選、避免亂套
+  const folderMap = new Map<
+    string,
+    Array<{ birthday: string | null; folderPath: string }>
+  >();
+  try {
+    const paths = await getPaths();
+    if (paths.state === 'ok' && paths.paths?.dataRoot) {
+      const folderRoot = paths.paths.dataRoot.replace(/\\+$/, '') + '\\病患資料夾';
+      const r = await listFolderNames(folderRoot);
+      if ('names' in r) {
+        for (const folderName of r.names) {
+          const parsed = parseFolderName(folderName);
+          if (!parsed.name) continue;
+          const folderPath = r.folder.replace(/\\+$/, '') + '\\' + folderName;
+          if (!folderMap.has(parsed.name)) folderMap.set(parsed.name, []);
+          folderMap.get(parsed.name)!.push({ birthday: parsed.birthday, folderPath });
+        }
+      }
+    }
+  } catch {
+    // ignore — folderMap 留空、不擋主邏輯
+  }
+
   // 2. 補建 newPatients (id 比不到時用 name+birthday 防重複)
   for (const np of newPatients) {
     const byId = await db.patients.get(np.id);
@@ -202,6 +231,20 @@ export async function reapplyExcelUpdates(): Promise<ReapplyResult> {
       result.newPatients.skippedExisted++;
       continue;
     }
+
+    // v0.4.2: 沒生日 / 沒 sourceFolder → 嘗試從 folderMap 找唯一同姓名 match
+    let autoMatched = false;
+    if (np.name && (!np.birthday || !np.sourceFolder)) {
+      const matches = folderMap.get(np.name) ?? [];
+      if (matches.length === 1) {
+        const m = matches[0];
+        if (!np.birthday && m.birthday) np.birthday = m.birthday;
+        if (!np.sourceFolder && m.folderPath) np.sourceFolder = m.folderPath;
+        autoMatched = true;
+      }
+      // 2+ matches: 不動、避免錯配（user 可在 sourceFolder 健檢 / 同名統計裡手動處理）
+    }
+
     // v0.1.9：JSON 可能沒帶 markdownNote/photos（Python script 不寫這兩欄）→ 補預設
     const enriched: Patient = {
       ...np,
@@ -210,6 +253,7 @@ export async function reapplyExcelUpdates(): Promise<ReapplyResult> {
     };
     await db.patients.put(enriched);
     result.newPatients.added++;
+    if (autoMatched) result.newPatients.matchedFromFolder++;
   }
 
   // 3. 補 orders

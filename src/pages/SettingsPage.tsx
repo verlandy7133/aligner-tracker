@@ -1998,6 +1998,11 @@ function ExcelImportSection() {
                 </div>
                 <div>
                   ✓ 新建病患：+{reapplyResult.newPatients.added}（已存在 {reapplyResult.newPatients.skippedExisted}）
+                  {reapplyResult.newPatients.matchedFromFolder > 0 && (
+                    <span className="text-emerald-400/80 ml-1">
+                      · 其中 {reapplyResult.newPatients.matchedFromFolder} 位 match 到資料夾自動補生日+路徑
+                    </span>
+                  )}
                 </div>
                 <div>
                   ✓ 下單紀錄：+{reapplyResult.orders.added}（已存在 {reapplyResult.orders.skippedExisted}）

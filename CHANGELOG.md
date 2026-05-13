@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.4.2 — 2026-05-13
+
+Excel 匯入新病患時、自動掃資料夾、找同姓名 → 補生日 + sourceFolder。
+
+### 背景
+
+主上看到 0253 張敏泓 等 Excel 新增的病患「缺生日、沒資料夾」、要每次手動點開補。
+但 NAS 病患資料夾名其實包含「生日 + 姓名」（如 `1041018張敏泓`），
+理論上 import 階段就可以 join 起來、不必事後人工補。
+
+### 變動（`src/lib/reapply-excel.ts`）
+
+- **新增階段先掃 `<dataRoot>\病患資料夾`**：
+  - 用 helper `listFolderNames` 拿所有 folder name
+  - `parseFolderName` 每個資料夾 → 抽出 (姓名, 生日, folderPath)
+  - 構建 `Map<name, [{birthday, folderPath}, ...]>`
+- **newPatient 階段加 auto-match**：
+  - 該病患沒生日 / 沒 sourceFolder + 姓名能在 folderMap 找到**唯一**同名
+  - → 自動補 `birthday` + `sourceFolder`（從資料夾名解析）
+  - 2+ 同名 match → 不動（避免亂套、user 之後在「同名病患統計」處理）
+- helper 沒回應 / dataRoot 沒設 → folderMap 留空、新病患就跟以前一樣缺生日（**不擋主邏輯**）
+- `ReapplyResult.newPatients.matchedFromFolder` 新統計欄位
+
+### 變動（`src/pages/SettingsPage.tsx`）
+
+- Excel 匯入完成卡片新增提示：「其中 N 位 match 到資料夾自動補生日+路徑」
+
+### 解什麼
+
+- 0253 張敏泓 case：下次跑 Excel 匯入時、若 NAS 有 `1041018張敏泓` 資料夾、會自動：
+  - birthday = 2015-10-18
+  - sourceFolder = `W:\0矯正追蹤\病患資料夾\1041018張敏泓`
+- 已存在的 0253 不會被改（reapply-excel 只動新建病患、既有 patient 不動）— 用「sourceFolder 健檢」或病患詳細頁手動補
+
 ## v0.4.1 — 2026-05-13
 
 病患列表加「醫師」filter — 給醫師快速看自己病患的入口。

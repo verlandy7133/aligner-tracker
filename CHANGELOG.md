@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.4.4 — 2026-05-13
+
+新增「補醫師（從下單記錄）」section、從 patient 的 orders 反推回補 patient.doctor。
+
+### 背景
+
+主上問：「沒有醫師的去對照 EXCEL 也沒有嗎」。
+查 code：早期 Excel import 只把 doctor 寫到 `Order`、沒同步到 `Patient`。
+`reapplyExcelUpdates` 雖有「Excel 有 doctor + DB 該欄空 → 套用」邏輯、
+但 source 是 `excel-patient-updates.json`（patient 層級）、不是 orders。
+許多病患在 Excel 內以 order 形式出現、order.doctor 有值、但 patient.doctor 一直空。
+
+### 新增（`DoctorBackfillSection`）
+
+- 加在 `BirthdayBackfillSection` 後面
+- **候選**：patient.doctor 空 + status 不是 completed/transferred-out（避免噪音）
+- **邏輯**：對每位查所有 orders 內 doctor 欄、收集 distinct 值
+  - 唯一 1 位醫師 → 補進 patient.doctor
+  - 多位不同醫師 → 標 ambiguous 不動（顯示各醫師名、user 自行處理）
+  - 無 order / order 也缺 doctor → 標 no-data 不動
+- **顯示**：結果分 4 類（matched / ambiguous / noOrders / ordersNoDoctor）、可展開看明細
+- 不蓋既有有效值
+
+### 五個資料健康度工具的角色分工
+
+| 工具 | 從哪補 | 補什麼 |
+|:--|:--|:--|
+| 補生日+資料夾（v0.4.3）| `<資料根>\病患資料夾\` folder name | birthday + sourceFolder |
+| **補醫師（v0.4.4）** | patient.orders[].doctor | patient.doctor |
+| sourceFolder 健檢自動修復（v0.3.20）| patient.allSourceFolders | patient.sourceFolder（替換 dead）|
+| 同名統計合併（v0.3.18）| 自己選保留筆 | order patientId 轉移、欄位互補 |
+| 病患詳細頁 ✏（v0.3.20）| 人工輸入 | 任意欄位 |
+
 ## v0.4.3 — 2026-05-13
 
 「補生日」section 升級為「補生日 + 資料夾路徑」、可批次修既有缺資料的病患。

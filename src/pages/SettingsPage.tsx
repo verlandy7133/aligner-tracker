@@ -92,6 +92,7 @@ export default function SettingsPage() {
           <RescanSection />
           <ExcelImportSection />
           <BirthdayBackfillSection />
+          <DoctorBackfillSection />
           <DuplicateNameSection />
           <SourceFolderHealthSection />
           <DbSection />
@@ -2278,6 +2279,206 @@ function BirthdayBackfillSection() {
                   ▸ 找不到 ({result.notFound.length})
                 </summary>
                 <div className="mt-2 text-zinc-500 pl-3">{result.notFound.join('、')}</div>
+              </details>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* ─── 從下單記錄補醫師（v0.4.4 新增）─────────────────────────
+ *   候選 = patient.doctor 空、且 status 不是 completed / transferred-out
+ *   對每位看 orders 內 doctor 欄：
+ *     - 唯一 1 位醫師 → 補進 patient.doctor
+ *     - 多位不同醫師 → 標 ambiguous 不動（user 自行處理）
+ *     - 無 order / order 內也沒 doctor → 標 no-data 不動
+ *   不蓋既有有效值。
+ */
+function DoctorBackfillSection() {
+  const [state, setState] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+  const [error, setError] = useState('');
+  const [result, setResult] = useState<{
+    candidatesCount: number;
+    matched: { chartNo: string; name: string; doctor: string; orderCount: number }[];
+    ambiguous: { chartNo: string; name: string; doctors: string[] }[];
+    noOrders: { chartNo: string; name: string }[];
+    ordersNoDoctor: { chartNo: string; name: string }[];
+  } | null>(null);
+
+  const candidatePatients =
+    useLiveQuery(async () => {
+      const all = await db.patients.toArray();
+      return all.filter(
+        (p) =>
+          (!p.doctor || !p.doctor.trim()) &&
+          p.status !== 'completed' &&
+          p.status !== 'transferred-out',
+      );
+    }) ?? [];
+
+  async function go() {
+    setState('running');
+    setError('');
+    setResult(null);
+
+    const allPatients = await db.patients.toArray();
+    const candidates = allPatients.filter(
+      (p) =>
+        (!p.doctor || !p.doctor.trim()) &&
+        p.status !== 'completed' &&
+        p.status !== 'transferred-out',
+    );
+    if (candidates.length === 0) {
+      setError('沒有缺醫師的病患（completed / transferred-out 不算）');
+      setState('error');
+      return;
+    }
+
+    const allOrders = await db.orders.toArray();
+    const ordersByPatient = new Map<string, typeof allOrders>();
+    for (const o of allOrders) {
+      if (!ordersByPatient.has(o.patientId)) ordersByPatient.set(o.patientId, []);
+      ordersByPatient.get(o.patientId)!.push(o);
+    }
+
+    const matched: { chartNo: string; name: string; doctor: string; orderCount: number }[] = [];
+    const ambiguous: { chartNo: string; name: string; doctors: string[] }[] = [];
+    const noOrders: { chartNo: string; name: string }[] = [];
+    const ordersNoDoctor: { chartNo: string; name: string }[] = [];
+
+    const nowIso = new Date().toISOString();
+    for (const p of candidates) {
+      const orders = ordersByPatient.get(p.id) ?? [];
+      if (orders.length === 0) {
+        noOrders.push({ chartNo: p.chartNo, name: p.name });
+        continue;
+      }
+      const doctors = [
+        ...new Set(orders.map((o) => o.doctor?.trim()).filter((d): d is string => !!d)),
+      ];
+      if (doctors.length === 0) {
+        ordersNoDoctor.push({ chartNo: p.chartNo, name: p.name });
+        continue;
+      }
+      if (doctors.length > 1) {
+        ambiguous.push({ chartNo: p.chartNo, name: p.name, doctors });
+        continue;
+      }
+      const doctor = doctors[0];
+      await db.patients.update(p.id, { doctor, updatedAt: nowIso });
+      matched.push({ chartNo: p.chartNo, name: p.name, doctor, orderCount: orders.length });
+    }
+
+    setResult({
+      candidatesCount: candidates.length,
+      matched,
+      ambiguous,
+      noOrders,
+      ordersNoDoctor,
+    });
+    setState('done');
+  }
+
+  return (
+    <section className="rounded-xl border border-zinc-800 bg-zinc-900/30">
+      <header className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-medium text-zinc-200">補醫師（從下單記錄）</h2>
+          <span className="text-xs text-zinc-500">候選 {candidatePatients.length} 人</span>
+        </div>
+        <button
+          onClick={go}
+          disabled={state === 'running' || candidatePatients.length === 0}
+          className="px-3 py-1.5 rounded-md text-xs border border-zinc-700 text-zinc-200 hover:bg-zinc-800 transition disabled:opacity-50"
+        >
+          {state === 'running' ? '⏳ 處理中…' : '👤 立即補上'}
+        </button>
+      </header>
+      <div className="p-5 space-y-2 text-sm">
+        <p className="text-xs text-zinc-500">
+          掃缺醫師的病患、查他的 orders 是否有 doctor 欄、唯一一位醫師就補進去。
+          <strong className="text-zinc-300 block mt-1">
+            為什麼分這個工具：早期 Excel import 只把醫師寫到 order、沒同步到 patient；這版幫忙反推回去。
+          </strong>
+          completed / transferred-out 的病患不算（避免噪音）。
+        </p>
+        {error && (
+          <div className="px-3 py-2 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+            ⚠️ {error}
+          </div>
+        )}
+        {result && (
+          <div className="space-y-2 text-xs">
+            <div className="px-3 py-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
+              ✓ 補上 {result.matched.length} / {result.candidatesCount} 人
+              {result.ambiguous.length > 0 && ` · 多位醫師 ${result.ambiguous.length}`}
+              {result.noOrders.length > 0 && ` · 無下單 ${result.noOrders.length}`}
+              {result.ordersNoDoctor.length > 0 && ` · 下單也缺醫師 ${result.ordersNoDoctor.length}`}
+            </div>
+            {result.matched.length > 0 && (
+              <details>
+                <summary className="cursor-pointer text-zinc-500 hover:text-zinc-300">
+                  ▸ 補上清單 ({result.matched.length})
+                </summary>
+                <div className="mt-2 space-y-1 pl-3">
+                  {result.matched.slice(0, 50).map((m, i) => (
+                    <div key={`${m.chartNo}-${i}`} className="text-zinc-400">
+                      <span className="font-mono text-sky-300">{m.chartNo}</span>{' '}
+                      <span className="text-zinc-300">{m.name}</span>
+                      <span className="text-zinc-600 mx-1">→</span>
+                      <span className="text-emerald-400/80">{m.doctor}</span>
+                      <span className="text-zinc-600 ml-1">(from {m.orderCount} 筆 order)</span>
+                    </div>
+                  ))}
+                  {result.matched.length > 50 && (
+                    <div className="text-zinc-600">... 還有 {result.matched.length - 50} 個</div>
+                  )}
+                </div>
+              </details>
+            )}
+            {result.ambiguous.length > 0 && (
+              <details>
+                <summary className="cursor-pointer text-amber-400 hover:text-amber-300">
+                  ⚠ 多位醫師（{result.ambiguous.length}）— 不同 order 對應不同醫師、不自動補
+                </summary>
+                <div className="mt-2 space-y-1 pl-3">
+                  {result.ambiguous.map((a) => (
+                    <div key={a.chartNo} className="text-zinc-400">
+                      <span className="font-mono text-sky-300">{a.chartNo}</span>{' '}
+                      <strong className="text-zinc-200">{a.name}</strong>:
+                      <span className="text-amber-300 ml-1">{a.doctors.join(' / ')}</span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+            {(result.noOrders.length > 0 || result.ordersNoDoctor.length > 0) && (
+              <details>
+                <summary className="cursor-pointer text-zinc-500 hover:text-zinc-300">
+                  ▸ 無法處理（{result.noOrders.length + result.ordersNoDoctor.length}）
+                </summary>
+                <div className="mt-2 space-y-1 pl-3 text-zinc-500">
+                  {result.noOrders.length > 0 && (
+                    <div>
+                      <strong>無下單記錄</strong>（{result.noOrders.length}）：
+                      {result.noOrders.slice(0, 20).map((p) => `${p.chartNo} ${p.name}`).join('、')}
+                      {result.noOrders.length > 20 && ` ... +${result.noOrders.length - 20}`}
+                    </div>
+                  )}
+                  {result.ordersNoDoctor.length > 0 && (
+                    <div>
+                      <strong>有下單但也缺醫師</strong>（{result.ordersNoDoctor.length}）：
+                      {result.ordersNoDoctor
+                        .slice(0, 20)
+                        .map((p) => `${p.chartNo} ${p.name}`)
+                        .join('、')}
+                      {result.ordersNoDoctor.length > 20 &&
+                        ` ... +${result.ordersNoDoctor.length - 20}`}
+                    </div>
+                  )}
+                </div>
               </details>
             )}
           </div>

@@ -2499,11 +2499,13 @@ function DupGroupCard({ group }: { group: DupGroup }) {
   );
 }
 
-/* ─── sourceFolder 健檢（v0.3.19 新增）────────────────────────
+/* ─── sourceFolder 健檢（v0.3.19 新增、v0.3.20 加自動修復）─────
  *   掃所有 patient.sourceFolder + consentPdfPath、用 helper 檢查實際是否存在。
  *   找出 dead links：可能原因 (1) 資料夾被改名 (2) 被移到別處 (3) 已刪除 (4) NAS 沒連
- *   結果分組：sourceFolder 死 / consentPdfPath 死 / 兩者皆死 / 完全沒設
  *   點 chartNo 跳病患詳細頁、可手動處理。
+ *
+ *   v0.3.20: 加「自動修復」— 對每筆 dead sourceFolder、查該 patient.allSourceFolders
+ *           內是否有活路徑（合併殘留 / 跨機 sync 記下）、找到就一鍵替換。
  */
 type DeadLink = {
   patient: Patient;
@@ -2511,10 +2513,18 @@ type DeadLink = {
   path: string;
 };
 
+type RepairCandidate = {
+  patient: Patient;
+  oldPath: string;
+  newPath: string;
+};
+
 function SourceFolderHealthSection() {
   const allPatients = useLiveQuery(() => db.patients.toArray()) ?? [];
   const [state, setState] = useState<'idle' | 'checking' | 'done' | 'error'>('idle');
   const [deadLinks, setDeadLinks] = useState<DeadLink[]>([]);
+  const [repairs, setRepairs] = useState<RepairCandidate[]>([]);
+  const [busy, setBusy] = useState(false);
   const [stats, setStats] = useState<{
     totalPatients: number;
     totalPaths: number;
@@ -2527,6 +2537,7 @@ function SourceFolderHealthSection() {
     setState('checking');
     setErrorMsg('');
     setDeadLinks([]);
+    setRepairs([]);
     setStats(null);
 
     // 集合所有要檢查的路徑、用 Map 對應到 patient + field
@@ -2583,7 +2594,35 @@ function SourceFolderHealthSection() {
       return (a.patient.chartNo ?? '').localeCompare(b.patient.chartNo ?? '');
     });
 
+    // ── 第二階段：對每筆 dead sourceFolder、查 allSourceFolders 找活的 ──
+    const extraPathsToCheck = new Set<string>();
+    for (const d of dead) {
+      if (d.field !== 'sourceFolder') continue;
+      for (const alt of d.patient.allSourceFolders ?? []) {
+        if (alt === d.path) continue;
+        if (alt in r.results) continue; // 已 check 過、結果在 r.results 內
+        extraPathsToCheck.add(alt);
+      }
+    }
+    let extraResults: Record<string, boolean> = {};
+    if (extraPathsToCheck.size > 0) {
+      const r2 = await checkPaths([...extraPathsToCheck]);
+      if (r2.state === 'ok') extraResults = r2.results;
+    }
+    const allResults = { ...r.results, ...extraResults };
+
+    const repairCandidates: RepairCandidate[] = [];
+    for (const d of dead) {
+      if (d.field !== 'sourceFolder') continue;
+      const alts = d.patient.allSourceFolders ?? [];
+      const alive = alts.find((a) => a !== d.path && allResults[a] === true);
+      if (alive) {
+        repairCandidates.push({ patient: d.patient, oldPath: d.path, newPath: alive });
+      }
+    }
+
     setDeadLinks(dead);
+    setRepairs(repairCandidates);
     setStats({
       totalPatients: allPatients.length,
       totalPaths: allPaths.length,
@@ -2593,8 +2632,49 @@ function SourceFolderHealthSection() {
     setState('done');
   }
 
+  async function applyAllRepairs() {
+    if (repairs.length === 0) return;
+    if (
+      !confirm(
+        `要把 ${repairs.length} 位病患的 sourceFolder 改成 allSourceFolders 內的活路徑嗎？\n\n` +
+          `每筆會：把 sourceFolder 設成找到的活路徑、原 dead 路徑會保留在 allSourceFolders 內（不丟）。\n` +
+          `不可一鍵 undo、但 allSourceFolders 還在、之後可在病患詳細頁切換。`,
+      )
+    )
+      return;
+    setBusy(true);
+    try {
+      const nowIso = new Date().toISOString();
+      for (const r of repairs) {
+        await db.patients.update(r.patient.id, {
+          sourceFolder: r.newPath,
+          updatedAt: nowIso,
+        });
+      }
+      // 完成後立刻重跑一次健檢
+      await go();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyOneRepair(r: RepairCandidate) {
+    if (!confirm(`把 ${r.patient.chartNo} ${r.patient.name} 的 sourceFolder 改成：\n\n${r.newPath}\n\n原 dead 路徑會保留在 allSourceFolders 內。`)) return;
+    setBusy(true);
+    try {
+      await db.patients.update(r.patient.id, {
+        sourceFolder: r.newPath,
+        updatedAt: new Date().toISOString(),
+      });
+      await go();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const sourceFolderDead = deadLinks.filter((d) => d.field === 'sourceFolder');
   const consentPdfDead = deadLinks.filter((d) => d.field === 'consentPdfPath');
+  const repairableIds = new Set(repairs.map((r) => r.patient.id));
 
   return (
     <section className="rounded-xl border border-zinc-800 bg-zinc-900/30">
@@ -2642,14 +2722,74 @@ function SourceFolderHealthSection() {
           </div>
         )}
 
+        {repairs.length > 0 && (
+          <div className="px-3 py-2.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="text-emerald-300 font-medium">
+                ✨ 找到 {repairs.length} 筆可自動修復（allSourceFolders 內有活路徑）
+              </div>
+              <button
+                onClick={applyAllRepairs}
+                disabled={busy}
+                className="px-2.5 py-1 rounded bg-emerald-600/30 border border-emerald-500/60 text-emerald-100 text-[11px] hover:bg-emerald-600/40 transition disabled:opacity-40"
+              >
+                {busy ? '修復中…' : '⚡ 一鍵全修復'}
+              </button>
+            </div>
+            <details>
+              <summary className="cursor-pointer text-emerald-400/80 hover:text-emerald-300 text-[11px]">
+                展開看修復對照（{repairs.length} 筆）
+              </summary>
+              <div className="mt-2 space-y-1.5">
+                {repairs.map((r) => (
+                  <div
+                    key={r.patient.id}
+                    className="px-2 py-1.5 rounded bg-zinc-950/40 border border-zinc-800 space-y-0.5"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Link
+                        to={`/patients/${r.patient.id}`}
+                        className="font-mono text-sky-300 hover:text-sky-200 text-[11px]"
+                      >
+                        {r.patient.chartNo}
+                      </Link>
+                      <span className="text-zinc-300 text-[11px]">{r.patient.name}</span>
+                      <button
+                        onClick={() => applyOneRepair(r)}
+                        disabled={busy}
+                        className="ml-auto px-2 py-0.5 rounded bg-emerald-600/20 border border-emerald-500/40 text-emerald-200 text-[10px] hover:bg-emerald-600/30 disabled:opacity-40"
+                      >
+                        ✓ 修這筆
+                      </button>
+                    </div>
+                    <div className="text-[10px] text-zinc-500">
+                      <span className="text-rose-400/80">✗ </span>
+                      <code className="break-all">{r.oldPath}</code>
+                    </div>
+                    <div className="text-[10px] text-zinc-500">
+                      <span className="text-emerald-400/80">→ </span>
+                      <code className="break-all">{r.newPath}</code>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </details>
+          </div>
+        )}
+
         {sourceFolderDead.length > 0 && (
           <details className="text-xs" open>
             <summary className="cursor-pointer text-rose-300 hover:text-rose-200 font-medium">
-              🔴 sourceFolder 指向不存在（{sourceFolderDead.length} 筆）
+              🔴 sourceFolder 指向不存在（{sourceFolderDead.length} 筆
+              {repairs.length > 0 && `、其中 ${repairs.length} 筆可自動修復`}）
             </summary>
             <div className="mt-2 space-y-1">
               {sourceFolderDead.map((d, i) => (
-                <DeadLinkRow key={`${d.patient.id}-${i}`} d={d} />
+                <DeadLinkRow
+                  key={`${d.patient.id}-${i}`}
+                  d={d}
+                  hasRepair={repairableIds.has(d.patient.id)}
+                />
               ))}
             </div>
           </details>
@@ -2679,7 +2819,7 @@ function SourceFolderHealthSection() {
   );
 }
 
-function DeadLinkRow({ d }: { d: DeadLink }) {
+function DeadLinkRow({ d, hasRepair = false }: { d: DeadLink; hasRepair?: boolean }) {
   return (
     <Link
       to={`/patients/${d.patient.id}`}
@@ -2693,6 +2833,14 @@ function DeadLinkRow({ d }: { d: DeadLink }) {
       <span className="text-rose-400/80 text-[10px] truncate flex-1" title={d.path}>
         {d.path}
       </span>
+      {hasRepair && (
+        <span
+          className="text-[10px] text-emerald-400 flex-shrink-0"
+          title="此筆有自動修復候選（allSourceFolders 內找到活路徑）"
+        >
+          ✨ 可修
+        </span>
+      )}
     </Link>
   );
 }

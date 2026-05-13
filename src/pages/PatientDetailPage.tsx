@@ -326,13 +326,62 @@ export default function PatientDetailPage() {
         )}
       </section>
 
-      {/* 來源資料夾 */}
-      {patient.sourceFolder && (
-        <section className="text-xs text-zinc-500">
-          <strong>來源資料夾：</strong>
-          <code className="ml-2 font-mono break-all">{patient.sourceFolder}</code>
-        </section>
-      )}
+      {/* 來源資料夾（v0.3.20 加編輯入口 + allSourceFolders 切換）*/}
+      <section className="text-xs text-zinc-500 space-y-1">
+        <div className="flex items-start gap-2">
+          <strong className="flex-shrink-0">來源資料夾：</strong>
+          <code className="font-mono break-all flex-1">
+            {patient.sourceFolder || <span className="text-zinc-600">(未設)</span>}
+          </code>
+          <button
+            onClick={async () => {
+              const newPath = prompt(
+                '編輯 sourceFolder 路徑：\n（清空 = 移除）',
+                patient.sourceFolder ?? '',
+              );
+              if (newPath === null) return; // 取消
+              const trimmed = newPath.trim();
+              await db.patients.update(patient.id, {
+                sourceFolder: trimmed,
+                updatedAt: new Date().toISOString(),
+              });
+            }}
+            className="text-sky-400 hover:text-sky-300 flex-shrink-0 px-1"
+            title="編輯路徑"
+          >
+            ✏
+          </button>
+        </div>
+        {patient.allSourceFolders && patient.allSourceFolders.length > 0 && (
+          <details className="ml-[6em]">
+            <summary className="cursor-pointer hover:text-zinc-300 text-[11px]">
+              其他歷史路徑（{patient.allSourceFolders.filter((p) => p !== patient.sourceFolder).length}）
+            </summary>
+            <ul className="mt-1 space-y-0.5">
+              {patient.allSourceFolders
+                .filter((p) => p !== patient.sourceFolder)
+                .map((p, i) => (
+                  <li key={i} className="flex items-center gap-2">
+                    <code className="font-mono break-all flex-1 text-[10px] text-zinc-500">{p}</code>
+                    <button
+                      onClick={async () => {
+                        if (!confirm(`把這條設為主 sourceFolder？\n\n${p}`)) return;
+                        await db.patients.update(patient.id, {
+                          sourceFolder: p,
+                          updatedAt: new Date().toISOString(),
+                        });
+                      }}
+                      className="text-emerald-400 hover:text-emerald-300 text-[10px] flex-shrink-0 px-1"
+                      title="設為主路徑"
+                    >
+                      ✓ 設為主
+                    </button>
+                  </li>
+                ))}
+            </ul>
+          </details>
+        )}
+      </section>
 
       <PatientFormModal
         target={editingTarget}

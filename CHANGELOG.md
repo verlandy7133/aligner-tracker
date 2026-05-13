@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.3.20 — 2026-05-13
+
+修補：合併後 sourceFolder 沒升級到活路徑、加自動修復 + 手動編輯入口。
+
+### 背景
+
+v0.3.18 合併功能上線後、主上把 0371（活路徑 W:）合進 0361（死路徑 D:）。
+原邏輯「保留 target、source 補空」對 sourceFolder 不適用 — target 的可能是舊死路徑、
+source 的才是新活路徑。0371 的活路徑被丟進 0361.allSourceFolders 但沒被升級成主 sourceFolder。
+
+### 新增
+
+- **sourceFolder 健檢加「✨ 自動修復」**（在 `SourceFolderHealthSection`）：
+  - 第二階段檢查：對每筆 dead sourceFolder、查該 patient 的 `allSourceFolders` 內是否有活路徑
+  - 找到 → 列出修復候選（顯示 ✗ 舊死路徑 → ✨ 新活路徑）
+  - 「⚡ 一鍵全修復」批次套用所有候選
+  - 每筆也有「✓ 修這筆」單獨按鈕
+  - 修復後 sourceFolder 改為活路徑、原死路徑保留在 allSourceFolders（隨時可切換）
+- **dead link 列表加「✨ 可修」標記**：在有自動修復候選的那筆顯示
+- **病患詳細頁加 sourceFolder 編輯入口**（`PatientDetailPage`）：
+  - 主路徑旁加 ✏ 按鈕 → prompt 輸入新路徑
+  - 顯示 `allSourceFolders` 歷史路徑列表 + 每條的「✓ 設為主」按鈕
+  - 手動 fallback：自動修復找不到時、直接貼新路徑
+
+### 使用流程（解 0361 程瑾恩 case）
+
+1. 樓上筆電升 v0.3.20
+2. 設定頁 → 「sourceFolder 健檢」按掃描
+3. 若 0361 有 `allSourceFolders = ['D:\矯正\...', 'W:\0矯正追蹤\...']`、
+   而 W: 那條 alive → 會出現 ✨ 自動修復候選
+4. 按「⚡ 一鍵全修復」→ 0361.sourceFolder 升級到 W: 路徑 ✓
+5. 找不到自動修復 → 進病患詳細頁手動 ✏ 編輯
+
 ## v0.3.19 — 2026-05-13
 
 加 sourceFolder 健檢、找「指向不存在」的死路徑。

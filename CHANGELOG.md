@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.4.6 — 2026-05-13
+
+修：醫師 filter + 「未登記醫師」warning 互斥不互清的 UX bug。
+
+### 背景
+
+自我盤點抓到：v0.4.1 加的醫師 filter 跟既有「⚠ 未登記醫師」warning button 同時 active 時、結果**永遠空**。
+- 選某醫師 = 過濾「該醫師的病患」
+- 開警示 = 過濾「doctor 空的病患」
+- 交集 = ∅
+
+不影響功能（分開都 work）、但會讓人困惑。
+
+### 變動（`PatientList.tsx`）
+
+- 點某醫師 chip → 自動清掉 missingDoctorOnly warning（互斥）
+- 點「未登記醫師」warning 變 active → 自動清 doctorFilter 回「全部」
+- 點「全部」醫師 chip 不影響 warning（兩者語意一致：全部病患內找缺醫師）
+
 ## v0.4.5 — 2026-05-13
 
 補醫師加 Excel fallback、查 IndexedDB 沒 order 時轉查 `excel-orders.json`。

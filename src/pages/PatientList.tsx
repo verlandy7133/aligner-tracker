@@ -272,7 +272,11 @@ export default function PatientList() {
                 <Chip
                   key={d}
                   active={doctorFilter === d}
-                  onClick={() => setDoctorFilter(d)}
+                  onClick={() => {
+                    setDoctorFilter(d);
+                    // v0.4.6: 選某醫師時清掉「未登記醫師」warning（互斥、避免結果永遠空）
+                    setMissingDoctorOnly(false);
+                  }}
                   label={d}
                   count={counts.doctor[d]}
                 />
@@ -339,7 +343,12 @@ export default function PatientList() {
           </button>
           <button
             type="button"
-            onClick={() => setMissingDoctorOnly(!missingDoctorOnly)}
+            onClick={() => {
+              // v0.4.6: 開「未登記醫師」時清醫師 filter（互斥、避免結果永遠空）
+              const next = !missingDoctorOnly;
+              setMissingDoctorOnly(next);
+              if (next) setDoctorFilter('all');
+            }}
             disabled={missingDoctorCount === 0}
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition ${
               missingDoctorOnly

@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.4.12 — 2026-05-14
+
+CropOverlay 配色改黑線 + 白 handle、更像小畫家。
+
+### 變動
+
+- 框邊：`border-emerald-400` → `border-black` + 內外白 boxShadow（黑白雙層、深淺背景都看得到）
+- handle：`bg-emerald-400 border-emerald-200` → `bg-white border-black`（白底黑邊、典型小畫家風）
+- mask 維持半透明黑（不變）
+
 ## v0.4.11 — 2026-05-14
 
 PhotoEditorModal 加小畫家風格的拖曳裁切框（CropOverlay）。

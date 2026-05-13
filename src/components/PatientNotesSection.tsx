@@ -590,9 +590,9 @@ function CropOverlay({
     height: `${visibleH * 100}%`,
   };
 
-  // handle 共用 style helper
+  // v0.4.12: 改小畫家配色 — 黑線 + 白 handle 黑邊
   const handleSize = 'w-3 h-3';
-  const handleClass = `absolute ${handleSize} bg-emerald-400 border border-emerald-200 shadow rounded-sm pointer-events-auto`;
+  const handleClass = `absolute ${handleSize} bg-white border border-black shadow-sm pointer-events-auto`;
 
   return (
     <div
@@ -608,10 +608,13 @@ function CropOverlay({
       <div className="absolute bg-black/50 pointer-events-none" style={{ top: `${cropTop * 100}%`, bottom: `${cropBottom * 100}%`, left: 0, width: `${cropLeft * 100}%` }} />
       <div className="absolute bg-black/50 pointer-events-none" style={{ top: `${cropTop * 100}%`, bottom: `${cropBottom * 100}%`, right: 0, width: `${cropRight * 100}%` }} />
 
-      {/* crop rect 邊框 + 中央拖動區 */}
+      {/* crop rect 邊框 + 中央拖動區 — v0.4.12: 黑線 + 白色 outline (確保深淺背景都看得到) */}
       <div
-        className="absolute border-2 border-emerald-400 cursor-move pointer-events-auto"
-        style={cropRectStyle}
+        className="absolute border-2 border-black cursor-move pointer-events-auto"
+        style={{
+          ...cropRectStyle,
+          boxShadow: 'inset 0 0 0 1px white, 0 0 0 1px white',
+        }}
         onPointerDown={(e) => handlePointerDown('move', e)}
       >
         {/* 8 handles — 4 角 + 4 邊 */}

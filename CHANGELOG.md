@@ -1,5 +1,52 @@
 # Changelog
 
+## v0.3.16 — 2026-05-13
+
+修 master 角色更新失敗的根本問題 + 補 python 套件自動裝。
+
+### 背景
+
+樓上筆電 v0.3.2 → v0.3.14 更新失敗（exit 1 in [0/3] working tree dirty）。
+root cause：上次 npm install 自動改寫 `package-lock.json` → git 認為 dirty → 下次 update 直接卡。
+這是**系統性問題**、不是偶發。master 角色契約是「不寫 code、只跑」、任何 tracked file 變動都是噪音。
+
+### 變動（`scripts/update.ps1`）
+
+- **step [0/3] 偵測 dirty 自動 reset**（不再 exit 1）
+  - 列出 dirty 清單給看（透明度）→ 跑 `git -c core.autocrlf=false reset --hard HEAD` 自動清乾淨
+  - 萬一砍錯、`git reflog` 仍可救前一個 HEAD
+- **master 角色首次跑會設 `core.autocrlf=false`**
+  - 消除 Windows 自動 CRLF 翻譯造成的跨機 line ending dirty
+- **npm install 後自動補 python 套件**：`openpyxl` (Excel 匯入) + `pillow-heif` (HEIC 預覽)
+  - 沒有 python 也不擋更新、只跳過
+
+### 結果
+
+- 之後樓上筆電按「更新到 main」**不會再卡 lockfile dirty**
+- 之後新增 python import / heic 預覽功能、套件會跟著 update 一起裝、不用主上手動 pip install
+
+## v0.3.15 — 2026-05-13
+
+「掃描 Excel」+「重新套用 Excel」兩個 section 合併成單一「Excel 匯入」、一鍵到底。
+
+### 變動
+
+- **新增 `ExcelImportSection`** 取代原本的 `ScanExcelSection` + `ReapplyExcelSection` 兩塊
+  - 主按鈕「📥 掃描並套用 Excel」：跑 python → 成功就接著套進 IndexedDB
+  - 顯示分階段進度：「(1/2) 掃描中… → (2/2) 套用中…」
+  - 任一步失敗就停在那步、紅色提示 + python log 可展開
+- **進階折疊區「分開執行（debug 用）」** 保留兩顆獨立按鈕
+  - 「📂 只掃描」— 產 JSON、不動 IndexedDB（看 python 輸出再決定要不要套）
+  - 「⟳ 只套用」— 讀現有 JSON 套進 IndexedDB
+- **修文案 bug**：「掃描 D:\\矯正\\下單Excel\\」(寫死路徑) → `<資料根>\下單Excel\`（跟實際 helper 邏輯一致）
+  - 之前文案誤導 → 樓上筆電 user 以為要在 D:\ 開資料夾、實際 helper 找的是 `<dataRoot>/下單Excel`
+- 移除 confirm 對話框（按到掃描的人就是要掃、不需要再問一次）
+
+### 已知前置（外部依賴）
+
+- 筆電 Python 要先裝 `openpyxl`：`python -m pip install openpyxl`
+- `<資料根>` 底下要有 `下單Excel\` 資料夾、放含「生產資料庫」+「牙套下單」兩 sheet 的 .xlsx
+
 ## v0.3.14 — 2026-05-13
 
 裁切 slider 上限 0.45 → 0.7（45% → 70%）。

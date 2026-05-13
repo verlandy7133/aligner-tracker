@@ -86,8 +86,7 @@ export default function SettingsPage() {
           <AlertSection />
           <BackupSection />
           <RescanSection />
-          <ScanExcelSection />
-          <ReapplyExcelSection />
+          <ExcelImportSection />
           <BirthdayBackfillSection />
           <DbSection />
         </>
@@ -1849,143 +1848,177 @@ function RescanSection() {
   );
 }
 
-/* ─── 掃 Excel 資料夾、跑 python 出 JSON ─────────────────── */
-function ScanExcelSection() {
-  const [state, setState] = useState<'idle' | 'scanning' | 'done' | 'error'>('idle');
-  const [error, setError] = useState('');
-  const [logText, setLogText] = useState('');
-  const [folder, setFolder] = useState('');
+/* ─── Excel 匯入：一鍵掃描 + 套用（v0.3.15 合併原本兩個 section）──── */
+//   主按鈕：跑 python 出 dev-data JSON → 接著套進 IndexedDB（兩步串接）
+//   進階折疊：分開執行兩步，供 debug / 確認 JSON 後再套用
+function ExcelImportSection() {
+  type Phase = 'idle' | 'scanning' | 'applying' | 'done' | 'error';
+  const [phase, setPhase] = useState<Phase>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [scanLog, setScanLog] = useState('');
+  const [scanFolder, setScanFolder] = useState('');
+  const [reapplyResult, setReapplyResult] = useState<ReapplyResult | null>(null);
 
-  async function go() {
-    if (!confirm('掃描 D:\\矯正\\下單Excel\\ 內的 Excel 檔，跑 python import 重新產出 dev-data JSON。\n\n完成後還要按「重新套用 Excel 匯入」才會把資料套到 IndexedDB。')) return;
-    setState('scanning');
-    setError('');
-    setLogText('');
+  // ── 共用：跑掃描 ──────────────────────────────────────
+  async function doScan(): Promise<boolean> {
+    setPhase('scanning');
+    setErrorMsg('');
+    setScanLog('');
+    setScanFolder('');
+    setReapplyResult(null);
     const r = await scanExcel();
     if (r.state === 'helper-down') {
-      setError('本機 helper 沒回應');
-      setState('error');
-      return;
+      setErrorMsg('本機 helper 沒回應');
+      setPhase('error');
+      return false;
     }
     if (r.state === 'error') {
-      setError(r.message);
-      setState('error');
-      return;
+      setErrorMsg(r.message);
+      setPhase('error');
+      return false;
     }
-    setFolder(r.excelFolder);
-    setLogText(
+    setScanFolder(r.excelFolder);
+    setScanLog(
       r.log
         .map((l) => `=== ${l.script} (exit ${l.exitCode}) ===\n${l.stdout ?? ''}${l.stderr ? '\n[stderr]\n' + l.stderr : ''}${l.error ? '\n[error] ' + l.error : ''}`)
         .join('\n\n'),
     );
-    setState(r.success ? 'done' : 'error');
-    if (!r.success) setError('一支或兩支 python script 退出碼非 0，看下方 log。');
+    if (!r.success) {
+      setErrorMsg('python script 退出碼非 0、看下方 log。');
+      setPhase('error');
+      return false;
+    }
+    return true;
   }
 
-  return (
-    <section className="rounded-xl border border-zinc-800 bg-zinc-900/30">
-      <header className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between">
-        <h2 className="text-sm font-medium text-zinc-200">掃描 Excel 資料夾</h2>
-        <button
-          onClick={go}
-          disabled={state === 'scanning'}
-          className="px-3 py-1.5 rounded-md text-xs border border-zinc-700 text-zinc-200 hover:bg-zinc-800 transition disabled:opacity-50"
-        >
-          {state === 'scanning' ? '📂 掃描中…' : '📂 立即掃描 Excel'}
-        </button>
-      </header>
-      <div className="p-5 space-y-2 text-sm">
-        <p className="text-xs text-zinc-500">
-          讀 <code className="text-zinc-400">D:\矯正\下單Excel\</code>（筆電是 C:\）的 <code className="text-zinc-400">下單紀錄.xlsx</code> 跟 <code className="text-zinc-400">補充下單紀錄.xlsx</code>，跑 python 兩支 import 重產 dev-data JSON。
-          <strong className="text-zinc-300 block mt-1">不會直接動 IndexedDB</strong>，跑完還要按下方「重新套用 Excel 匯入」才生效。
-        </p>
-        {state === 'done' && (
-          <div className="px-3 py-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs">
-            ✓ 掃描完成。現在按「重新套用 Excel 匯入」把更新套到 IndexedDB。
-            {folder && <div className="text-zinc-500 mt-1">資料夾：{folder}</div>}
-          </div>
-        )}
-        {error && (
-          <div className="px-3 py-2 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
-            ⚠️ {error}
-          </div>
-        )}
-        {logText && (
-          <details className="text-xs">
-            <summary className="cursor-pointer text-zinc-500 hover:text-zinc-300">查看 python 輸出</summary>
-            <pre className="mt-2 p-3 bg-zinc-950/60 rounded text-[10px] text-zinc-400 overflow-x-auto whitespace-pre-wrap">{logText}</pre>
-          </details>
-        )}
-      </div>
-    </section>
-  );
-}
-
-/* ─── 重新套用 Excel 匯入結果 ─────────────────────────────── */
-function ReapplyExcelSection() {
-  const [state, setState] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
-  const [result, setResult] = useState<ReapplyResult | null>(null);
-  const [error, setError] = useState('');
-
-  async function go() {
-    setState('running');
-    setError('');
-    setResult(null);
+  // ── 共用：跑套用 ──────────────────────────────────────
+  async function doApply(): Promise<boolean> {
+    setPhase('applying');
+    setErrorMsg('');
     try {
-      const r = await reapplyExcelUpdates();
-      setResult(r);
-      setState('done');
+      const result = await reapplyExcelUpdates();
+      setReapplyResult(result);
+      setPhase('done');
+      return true;
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setState('error');
+      setErrorMsg(`套用階段失敗：${e instanceof Error ? e.message : String(e)}`);
+      setPhase('error');
+      return false;
     }
   }
 
+  // ── 一鍵：掃 → 套 ────────────────────────────────────
+  async function runAll() {
+    const ok = await doScan();
+    if (!ok) return;
+    await doApply();
+  }
+
+  // ── 進階：只掃 ────────────────────────────────────────
+  async function runScanOnly() {
+    const ok = await doScan();
+    if (ok) setPhase('done'); // reapplyResult 仍 null → UI 自動顯示「掃描完成、待套用」提示
+  }
+
+  // ── 進階：只套用 ──────────────────────────────────────
+  async function runApplyOnly() {
+    setScanLog(''); // 清掉舊 log 避免混淆
+    setScanFolder('');
+    await doApply();
+  }
+
+  const isRunning = phase === 'scanning' || phase === 'applying';
+  const mainLabel =
+    phase === 'scanning' ? '⟳ (1/2) 掃描中…'
+      : phase === 'applying' ? '⟳ (2/2) 套用中…'
+      : '📥 掃描並套用 Excel';
+
   return (
     <section className="rounded-xl border border-zinc-800 bg-zinc-900/30">
       <header className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between">
-        <h2 className="text-sm font-medium text-zinc-200">重新套用 Excel 匯入</h2>
+        <h2 className="text-sm font-medium text-zinc-200">Excel 匯入</h2>
         <button
-          onClick={go}
-          disabled={state === 'running'}
-          className="px-3 py-1.5 rounded-md text-xs border border-zinc-700 text-zinc-200 hover:bg-zinc-800 transition disabled:opacity-50"
+          onClick={runAll}
+          disabled={isRunning}
+          className="px-3 py-1.5 rounded-md text-xs border border-sky-700/60 bg-sky-600/10 text-sky-200 hover:bg-sky-600/20 transition disabled:opacity-50"
         >
-          {state === 'running' ? '⟳ 套用中…' : '⟳ 立即套用'}
+          {mainLabel}
         </button>
       </header>
       <div className="p-5 space-y-2 text-sm">
         <p className="text-xs text-zinc-500">
-          讀 <code className="text-zinc-400">dev-data/excel-patient-updates.json</code> 與{' '}
-          <code className="text-zinc-400">excel-orders.json</code>，把醫師 / 口掃 / 副數總數等資訊
-          <strong>補進空欄位</strong>，不會覆蓋你已手動編輯過的值。沒下單的病患會新增 order，新建病患會補上。
+          一鍵：(1) 掃 <code className="text-zinc-400">{'<資料根>\\下單Excel\\'}</code> 內含「生產資料庫」+「牙套下單」兩個 sheet 的 .xlsx、跑 python 重產 dev-data JSON →
+          (2) 把醫師 / 口掃 / 副數總數等資訊<strong className="text-zinc-300">補進空欄位</strong>（不覆蓋已手動編輯的值）、補新病患、補新下單。
         </p>
-        {state === 'done' && result && (
+
+        {phase === 'done' && (
           <div className="px-3 py-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs space-y-0.5">
-            <div>
-              ✓ 病患更新：{result.updates.patientsPatched} 位（候選 {result.updates.candidates}，全已設過 {result.updates.skippedAllSet}，找不到 {result.updates.skippedNotFound}）
-            </div>
-            <div className="text-emerald-400/80 pl-4">
-              · 醫師：+{result.updates.fieldsPatched.doctor} ·
-              口掃：+{result.updates.fieldsPatched.scanInfo} ·
-              副數：+{result.updates.fieldsPatched.totalAligners} ·
-              授權書升級：+{result.updates.fieldsPatched.hasConsent}
-            </div>
-            <div>
-              ✓ 新建病患：+{result.newPatients.added}（已存在 {result.newPatients.skippedExisted}）
-            </div>
-            <div>
-              ✓ 下單紀錄：+{result.orders.added}（已存在 {result.orders.skippedExisted}）
-            </div>
-            <div>
-              ✓ 從下單推算副數：{result.derivedCurrent.patientsUpdated} 位
-            </div>
+            {reapplyResult ? (
+              <>
+                <div>
+                  ✓ 病患更新：{reapplyResult.updates.patientsPatched} 位（候選 {reapplyResult.updates.candidates}，全已設過 {reapplyResult.updates.skippedAllSet}，找不到 {reapplyResult.updates.skippedNotFound}）
+                </div>
+                <div className="text-emerald-400/80 pl-4">
+                  · 醫師：+{reapplyResult.updates.fieldsPatched.doctor} ·
+                  口掃：+{reapplyResult.updates.fieldsPatched.scanInfo} ·
+                  副數：+{reapplyResult.updates.fieldsPatched.totalAligners} ·
+                  授權書升級：+{reapplyResult.updates.fieldsPatched.hasConsent}
+                </div>
+                <div>
+                  ✓ 新建病患：+{reapplyResult.newPatients.added}（已存在 {reapplyResult.newPatients.skippedExisted}）
+                </div>
+                <div>
+                  ✓ 下單紀錄：+{reapplyResult.orders.added}（已存在 {reapplyResult.orders.skippedExisted}）
+                </div>
+                <div>
+                  ✓ 從下單推算副數：{reapplyResult.derivedCurrent.patientsUpdated} 位
+                </div>
+              </>
+            ) : (
+              <div>
+                ✓ 掃描完成、dev-data JSON 已產出。要套到 IndexedDB 請按下方「⟳ 只套用」。
+              </div>
+            )}
+            {scanFolder && <div className="text-zinc-500 mt-1">資料夾：{scanFolder}</div>}
           </div>
         )}
-        {state === 'error' && (
-          <div className="px-3 py-2 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300">
-            ⚠️ {error}
+
+        {phase === 'error' && errorMsg && (
+          <div className="px-3 py-2 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+            ⚠️ {errorMsg}
           </div>
         )}
+
+        {scanLog && (
+          <details className="text-xs">
+            <summary className="cursor-pointer text-zinc-500 hover:text-zinc-300">查看 python 輸出</summary>
+            <pre className="mt-2 p-3 bg-zinc-950/60 rounded text-[10px] text-zinc-400 overflow-x-auto whitespace-pre-wrap">{scanLog}</pre>
+          </details>
+        )}
+
+        <details className="text-xs pt-1">
+          <summary className="cursor-pointer text-zinc-500 hover:text-zinc-300">⚙ 進階：分開執行（debug 用）</summary>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              onClick={runScanOnly}
+              disabled={isRunning}
+              className="px-3 py-1.5 rounded-md text-xs border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition disabled:opacity-50"
+            >
+              📂 只掃描（產 JSON、不動 IndexedDB）
+            </button>
+            <button
+              onClick={runApplyOnly}
+              disabled={isRunning}
+              className="px-3 py-1.5 rounded-md text-xs border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition disabled:opacity-50"
+            >
+              ⟳ 只套用（讀現有 JSON 套進 IndexedDB）
+            </button>
+          </div>
+          <p className="text-[11px] text-zinc-600 mt-2 leading-relaxed">
+            分開執行時機：想先看 python 輸出 / 確認 dev-data JSON 沒問題、再決定要不要套到 IndexedDB。
+            一般使用按上面「掃描並套用」就好。
+          </p>
+        </details>
       </div>
     </section>
   );

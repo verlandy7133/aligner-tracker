@@ -61,6 +61,14 @@ if ($role -ne 'master') {
     exit 0
 }
 Write-Host "角色：$role ✓" -ForegroundColor Green
+
+# master 角色固定關 autocrlf — 避免 Windows 上 git checkout 出來自動 CRLF、
+# 又被 git status 認為跟 repo 內容不一致而立刻 dirty（跨機 line ending 噪音）
+$autocrlf = (git config --local core.autocrlf) 2>$null
+if ($autocrlf -ne 'false') {
+    git config --local core.autocrlf false
+    Write-Host '  ✓ 已設定 core.autocrlf=false（消除 line ending 跨機差異）' -ForegroundColor DarkGray
+}
 Write-Host ''
 
 # ── 偵測 Node ─────────────────────────────────────────
@@ -81,18 +89,27 @@ $nodeDir = Split-Path $nodeExe -Parent
 $npmCmd = Join-Path $nodeDir 'npm.cmd'
 $env:PATH = "$nodeDir;$env:PATH"
 
-# ── 0. 檢查工作樹是否乾淨 ─────────────────────────────
+# ── 0. 檢查工作樹是否乾淨（master 角色自動 reset）─────
+# master 角色契約 = 不寫 code、只跑 → 任何 tracked file 變動都是噪音
+# 來源多半是 npm install 重寫 package-lock.json、或 git autocrlf 自動翻譯
+# 直接 reset 到 HEAD；萬一砍錯、git reflog 仍可救回前一個狀態
 Write-Host '[0/3] 檢查本機是否有未提交變動...'
 $dirty = git status --porcelain
 if ($dirty) {
-    Write-Host '⚠️ 工作樹有未提交變動：' -ForegroundColor Yellow
+    Write-Host '⚠️ 偵測到工作樹有未提交變動（master 角色自動清掉）：' -ForegroundColor Yellow
     Write-Host $dirty -ForegroundColor Yellow
     Write-Host ''
-    Write-Host '請先 commit / stash / 還原這些變動再跑更新，或回開發機處理後 push。' -ForegroundColor Yellow
-    if (-not $Silent) { Read-Host '按 Enter 結束' }
-    exit 1
+    Write-Host '  → 自動 reset 到 HEAD（如要還原請 git reflog 查前一個 HEAD）...' -ForegroundColor DarkGray
+    git -c core.autocrlf=false reset --hard HEAD | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host '❌ 自動 reset 失敗、請手動處理' -ForegroundColor Red
+        if (-not $Silent) { Read-Host '按 Enter 結束' }
+        exit 1
+    }
+    Write-Host '  ✓ 已 reset 到乾淨狀態' -ForegroundColor Green
+} else {
+    Write-Host '  ✓ 工作樹乾淨' -ForegroundColor Green
 }
-Write-Host '  ✓ 工作樹乾淨' -ForegroundColor Green
 Write-Host ''
 
 # ── 1. git fetch + 切版本 ─────────────────────────────
@@ -163,6 +180,21 @@ if ($pkgChanged) {
     Write-Host '  ✓ npm install 完成' -ForegroundColor Green
 } else {
     Write-Host '[2/3] 套件依賴無變動，跳過 npm install' -ForegroundColor DarkGray
+}
+
+# 補 master 角色需要的 python 套件（Excel 匯入用 openpyxl、HEIC 預覽用 pillow-heif）
+# 缺套件不會擋更新、只是會在實際用功能時噴錯
+$pythonCmd = Get-Command python -ErrorAction SilentlyContinue
+if ($pythonCmd) {
+    Write-Host '      檢查 python 套件 (openpyxl, pillow-heif)...' -ForegroundColor DarkGray
+    & $pythonCmd.Source -m pip install -q openpyxl pillow-heif
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host '      ✓ python 套件就緒' -ForegroundColor DarkGreen
+    } else {
+        Write-Host '      ⚠️ python 套件安裝失敗（網路？）— Excel 匯入 / HEIC 預覽可能無法用' -ForegroundColor Yellow
+    }
+} else {
+    Write-Host '      （沒偵測到 python、跳過 python 套件檢查；之後要用 Excel 匯入請裝 Python）' -ForegroundColor DarkGray
 }
 Write-Host ''
 

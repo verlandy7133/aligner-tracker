@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.4.8 — 2026-05-13
+
+修：照片編輯 modal 沒改任何東西時「儲存」按鈕灰色 disabled、user 不知道為什麼點不下去。
+
+### 背景
+
+主上開照片編輯 modal、沒動任何 slider/button、按「儲存」沒反應。
+原邏輯：`disabled={!dirty}` — 沒實際改動就不能存（節省 IndexedDB write）。
+但 user 看到按鈕灰、感覺「壞了」、不直覺。
+
+### 變動（`PhotoEditorModal` in `PatientNotesSection.tsx`）
+
+- 移除 `disabled={!dirty}` — 按鈕永遠可點
+- Button label 動態：dirty=true 顯示「儲存」、false 顯示「關閉」
+- `save()` 內加 `if (dirty)` guard — 無變動時 skip db write 直接 close
+- 沒省 user 操作（左邊「取消」還在）、但消除「按了沒反應」困惑
+
 ## v0.4.7 — 2026-05-13
 
 深度 code review 修 4 個 bug + 1 個 minor。今天的工具 ship 太快、自我盤點抓出。

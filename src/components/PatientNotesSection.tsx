@@ -739,10 +739,13 @@ function PhotoEditorModal({
   }
 
   async function save() {
-    await db.patients.update(patient.id, {
-      photos: { ...(patient.photos || {}), [slot]: meta },
-      updatedAt: new Date().toISOString(),
-    });
+    // v0.4.8: 無變動時 skip db write、直接 close（避免「儲存」按鈕假死、user 不知道為什麼點不下去）
+    if (dirty) {
+      await db.patients.update(patient.id, {
+        photos: { ...(patient.photos || {}), [slot]: meta },
+        updatedAt: new Date().toISOString(),
+      });
+    }
     onClose();
   }
 
@@ -1008,10 +1011,9 @@ function PhotoEditorModal({
           </button>
           <button
             onClick={save}
-            disabled={!dirty}
-            className="px-4 py-2 rounded-md text-sm bg-sky-500 text-zinc-950 font-medium hover:bg-sky-400 transition disabled:opacity-50"
+            className="px-4 py-2 rounded-md text-sm bg-sky-500 text-zinc-950 font-medium hover:bg-sky-400 transition"
           >
-            儲存
+            {dirty ? '儲存' : '關閉'}
           </button>
         </footer>
       </div>

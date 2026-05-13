@@ -326,6 +326,9 @@ export default function PatientDetailPage() {
         )}
       </section>
 
+      {/* TODO v0.5+: 整合「治療前後對比」HTML — 預留接口在 src/lib/before-after.ts
+          矯正對照 session 設計完後、在此加 section / 按鈕、call openBeforeAfter(patient) */}
+
       {/* 來源資料夾（v0.3.20 加編輯入口 + allSourceFolders 切換）*/}
       <section className="text-xs text-zinc-500 space-y-1">
         <div className="flex items-start gap-2">

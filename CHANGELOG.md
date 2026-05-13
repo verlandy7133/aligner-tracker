@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.4.13 — 2026-05-14
+
+預留「治療前後對比 HTML」整合接口（library 層）。
+
+### 背景
+
+並行進行的「矯正對照」session 在設計獨立 HTML 樣板（`100_Todo/drafts/gen_classified_top13.py`、
+產 `D:\矯正\before-after-照片整理\<民國>姓名\_前後對比.html`、目前 100 個 case 已生成）。
+主上規劃**設計完後整合進 aligner-tracker**、現在先預留接口、設計完直接接。
+
+### 新增（`src/lib/before-after.ts`）
+
+- **`buildBeforeAfterPath(patient)`**：從 `patient.birthday` + `patient.name` 組路徑
+  - 民國年轉換：2002-01-19 → "910119"
+  - 完整路徑：`D:\矯正\before-after-照片整理\910119張三\_前後對比.html`
+  - 缺生日 / 名 → null
+- **`openBeforeAfter(patient)`**：call helper `/open-file` 開啟、回 typed result
+  - state: `opened` / `no-data` / `not-generated` / `helper-down`
+  - `not-generated` 時帶 `expectedPath` 給 UI 提示「該人 HTML 未生成」
+
+### PatientDetailPage 留 TODO marker
+
+在「來源資料夾」section 上方加 comment、整合時一眼找到接點。
+
+### 之後整合時的可能方案
+
+- A：加按鈕「📷 前後對比」、call `openBeforeAfter` 開獨立 HTML
+- B：iframe 內嵌 HTML 進 PatientDetailPage 某 section
+- C：把 gen_classified_top13.py 邏輯 port 進 React、native render
+- 待矯正對照 session 設計收斂後決定
+
 ## v0.4.12 — 2026-05-14
 
 CropOverlay 配色改黑線 + 白 handle、更像小畫家。

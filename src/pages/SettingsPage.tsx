@@ -2288,12 +2288,17 @@ function BirthdayBackfillSection() {
   );
 }
 
-/* ─── 從下單記錄補醫師（v0.4.4 新增）─────────────────────────
+/* ─── 從下單記錄補醫師（v0.4.4 新增、v0.4.5 加 Excel fallback）───────
  *   候選 = patient.doctor 空、且 status 不是 completed / transferred-out
- *   對每位看 orders 內 doctor 欄：
- *     - 唯一 1 位醫師 → 補進 patient.doctor
- *     - 多位不同醫師 → 標 ambiguous 不動（user 自行處理）
- *     - 無 order / order 內也沒 doctor → 標 no-data 不動
+ *   兩階段查詢：
+ *     A. IndexedDB orders：對每位看 orders 內 doctor 欄
+ *     B. fallback 查 dev-data/excel-orders.json：如果 IndexedDB 沒 order 但 Excel 有
+ *        （這 case 是 import 時 patientId 對不上、order 沒進 IndexedDB）
+ *   分類：
+ *     - matched (DB)：從 IndexedDB orders 找到唯一醫師、補進去
+ *     - matched (Excel)：IndexedDB 無 order、fallback Excel 找到唯一醫師、補進去
+ *     - ambiguous：多位不同醫師、不動
+ *     - 真的沒救：兩邊都沒 order / 兩邊都缺 doctor
  *   不蓋既有有效值。
  */
 function DoctorBackfillSection() {
@@ -2301,10 +2306,15 @@ function DoctorBackfillSection() {
   const [error, setError] = useState('');
   const [result, setResult] = useState<{
     candidatesCount: number;
-    matched: { chartNo: string; name: string; doctor: string; orderCount: number }[];
-    ambiguous: { chartNo: string; name: string; doctors: string[] }[];
-    noOrders: { chartNo: string; name: string }[];
-    ordersNoDoctor: { chartNo: string; name: string }[];
+    matched: {
+      chartNo: string;
+      name: string;
+      doctor: string;
+      source: 'db' | 'excel';
+      orderCount: number;
+    }[];
+    ambiguous: { chartNo: string; name: string; doctors: string[]; source: 'db' | 'excel' }[];
+    truelyNoData: { chartNo: string; name: string }[];
   } | null>(null);
 
   const candidatePatients =
@@ -2336,6 +2346,7 @@ function DoctorBackfillSection() {
       return;
     }
 
+    // 階段 1: IndexedDB orders
     const allOrders = await db.orders.toArray();
     const ordersByPatient = new Map<string, typeof allOrders>();
     for (const o of allOrders) {
@@ -2343,40 +2354,102 @@ function DoctorBackfillSection() {
       ordersByPatient.get(o.patientId)!.push(o);
     }
 
-    const matched: { chartNo: string; name: string; doctor: string; orderCount: number }[] = [];
-    const ambiguous: { chartNo: string; name: string; doctors: string[] }[] = [];
-    const noOrders: { chartNo: string; name: string }[] = [];
-    const ordersNoDoctor: { chartNo: string; name: string }[] = [];
+    // 階段 2 (fallback): dev-data/excel-orders.json
+    //   - 用 patientName trim 當 key (Excel 沒可靠 id 對映)
+    //   - 若 IndexedDB 找不到、就查這份
+    let excelOrdersByName = new Map<string, { doctor: string }[]>();
+    try {
+      const mod = await import('../../dev-data/excel-orders.json');
+      const data = (mod as unknown as { default: { orders: { patientName: string; doctor: string }[] } }).default;
+      for (const o of data?.orders ?? []) {
+        const key = o.patientName?.trim();
+        if (!key) continue;
+        if (!excelOrdersByName.has(key)) excelOrdersByName.set(key, []);
+        excelOrdersByName.get(key)!.push({ doctor: o.doctor });
+      }
+    } catch {
+      // dev-data 缺 → fallback 留空、不擋主邏輯
+      excelOrdersByName = new Map();
+    }
+
+    const matched: {
+      chartNo: string;
+      name: string;
+      doctor: string;
+      source: 'db' | 'excel';
+      orderCount: number;
+    }[] = [];
+    const ambiguous: {
+      chartNo: string;
+      name: string;
+      doctors: string[];
+      source: 'db' | 'excel';
+    }[] = [];
+    const truelyNoData: { chartNo: string; name: string }[] = [];
 
     const nowIso = new Date().toISOString();
     for (const p of candidates) {
-      const orders = ordersByPatient.get(p.id) ?? [];
-      if (orders.length === 0) {
-        noOrders.push({ chartNo: p.chartNo, name: p.name });
-        continue;
-      }
-      const doctors = [
-        ...new Set(orders.map((o) => o.doctor?.trim()).filter((d): d is string => !!d)),
+      // 階段 1: 查 IndexedDB orders
+      const dbOrders = ordersByPatient.get(p.id) ?? [];
+      const dbDoctors = [
+        ...new Set(dbOrders.map((o) => o.doctor?.trim()).filter((d): d is string => !!d)),
       ];
-      if (doctors.length === 0) {
-        ordersNoDoctor.push({ chartNo: p.chartNo, name: p.name });
+      if (dbDoctors.length === 1) {
+        await db.patients.update(p.id, { doctor: dbDoctors[0], updatedAt: nowIso });
+        matched.push({
+          chartNo: p.chartNo,
+          name: p.name,
+          doctor: dbDoctors[0],
+          source: 'db',
+          orderCount: dbOrders.length,
+        });
         continue;
       }
-      if (doctors.length > 1) {
-        ambiguous.push({ chartNo: p.chartNo, name: p.name, doctors });
+      if (dbDoctors.length > 1) {
+        ambiguous.push({
+          chartNo: p.chartNo,
+          name: p.name,
+          doctors: dbDoctors,
+          source: 'db',
+        });
         continue;
       }
-      const doctor = doctors[0];
-      await db.patients.update(p.id, { doctor, updatedAt: nowIso });
-      matched.push({ chartNo: p.chartNo, name: p.name, doctor, orderCount: orders.length });
+
+      // 階段 2 fallback: 查 Excel orders（IndexedDB 沒 order 或 order 缺 doctor 都試）
+      const excelDoctorsList = excelOrdersByName.get(p.name) ?? [];
+      const excelDoctors = [
+        ...new Set(excelDoctorsList.map((o) => o.doctor?.trim()).filter((d): d is string => !!d)),
+      ];
+      if (excelDoctors.length === 1) {
+        await db.patients.update(p.id, { doctor: excelDoctors[0], updatedAt: nowIso });
+        matched.push({
+          chartNo: p.chartNo,
+          name: p.name,
+          doctor: excelDoctors[0],
+          source: 'excel',
+          orderCount: excelDoctorsList.length,
+        });
+        continue;
+      }
+      if (excelDoctors.length > 1) {
+        ambiguous.push({
+          chartNo: p.chartNo,
+          name: p.name,
+          doctors: excelDoctors,
+          source: 'excel',
+        });
+        continue;
+      }
+
+      // 兩邊都沒救
+      truelyNoData.push({ chartNo: p.chartNo, name: p.name });
     }
 
     setResult({
       candidatesCount: candidates.length,
       matched,
       ambiguous,
-      noOrders,
-      ordersNoDoctor,
+      truelyNoData,
     });
     setState('done');
   }
@@ -2398,11 +2471,12 @@ function DoctorBackfillSection() {
       </header>
       <div className="p-5 space-y-2 text-sm">
         <p className="text-xs text-zinc-500">
-          掃缺醫師的病患、查他的 orders 是否有 doctor 欄、唯一一位醫師就補進去。
+          掃缺醫師的病患、兩階段查詢補回：
           <strong className="text-zinc-300 block mt-1">
-            為什麼分這個工具：早期 Excel import 只把醫師寫到 order、沒同步到 patient；這版幫忙反推回去。
+            (1) 查 IndexedDB orders → (2) 若沒、fallback 查{' '}
+            <code className="text-zinc-400">dev-data/excel-orders.json</code>（這份 Excel 原始 import 結果）
           </strong>
-          completed / transferred-out 的病患不算（避免噪音）。
+          唯一一位醫師才補。completed / transferred-out 的病患不算。
         </p>
         {error && (
           <div className="px-3 py-2 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
@@ -2413,9 +2487,10 @@ function DoctorBackfillSection() {
           <div className="space-y-2 text-xs">
             <div className="px-3 py-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
               ✓ 補上 {result.matched.length} / {result.candidatesCount} 人
+              {' '}(DB {result.matched.filter((m) => m.source === 'db').length}
+              {' '}/ Excel {result.matched.filter((m) => m.source === 'excel').length})
               {result.ambiguous.length > 0 && ` · 多位醫師 ${result.ambiguous.length}`}
-              {result.noOrders.length > 0 && ` · 無下單 ${result.noOrders.length}`}
-              {result.ordersNoDoctor.length > 0 && ` · 下單也缺醫師 ${result.ordersNoDoctor.length}`}
+              {result.truelyNoData.length > 0 && ` · 兩邊都查無 ${result.truelyNoData.length}`}
             </div>
             {result.matched.length > 0 && (
               <details>
@@ -2429,7 +2504,13 @@ function DoctorBackfillSection() {
                       <span className="text-zinc-300">{m.name}</span>
                       <span className="text-zinc-600 mx-1">→</span>
                       <span className="text-emerald-400/80">{m.doctor}</span>
-                      <span className="text-zinc-600 ml-1">(from {m.orderCount} 筆 order)</span>
+                      <span
+                        className={`text-[10px] ml-1 ${
+                          m.source === 'db' ? 'text-sky-400/70' : 'text-amber-400/70'
+                        }`}
+                      >
+                        [{m.source === 'db' ? `DB·${m.orderCount} 筆` : `Excel·${m.orderCount} 筆`}]
+                      </span>
                     </div>
                   ))}
                   {result.matched.length > 50 && (
@@ -2449,35 +2530,23 @@ function DoctorBackfillSection() {
                       <span className="font-mono text-sky-300">{a.chartNo}</span>{' '}
                       <strong className="text-zinc-200">{a.name}</strong>:
                       <span className="text-amber-300 ml-1">{a.doctors.join(' / ')}</span>
+                      <span className="text-[10px] text-zinc-500 ml-1">[from {a.source}]</span>
                     </div>
                   ))}
                 </div>
               </details>
             )}
-            {(result.noOrders.length > 0 || result.ordersNoDoctor.length > 0) && (
+            {result.truelyNoData.length > 0 && (
               <details>
                 <summary className="cursor-pointer text-zinc-500 hover:text-zinc-300">
-                  ▸ 無法處理（{result.noOrders.length + result.ordersNoDoctor.length}）
+                  ▸ 兩邊都查無（{result.truelyNoData.length}）— IndexedDB 沒 order、Excel 也沒
                 </summary>
                 <div className="mt-2 space-y-1 pl-3 text-zinc-500">
-                  {result.noOrders.length > 0 && (
-                    <div>
-                      <strong>無下單記錄</strong>（{result.noOrders.length}）：
-                      {result.noOrders.slice(0, 20).map((p) => `${p.chartNo} ${p.name}`).join('、')}
-                      {result.noOrders.length > 20 && ` ... +${result.noOrders.length - 20}`}
-                    </div>
-                  )}
-                  {result.ordersNoDoctor.length > 0 && (
-                    <div>
-                      <strong>有下單但也缺醫師</strong>（{result.ordersNoDoctor.length}）：
-                      {result.ordersNoDoctor
-                        .slice(0, 20)
-                        .map((p) => `${p.chartNo} ${p.name}`)
-                        .join('、')}
-                      {result.ordersNoDoctor.length > 20 &&
-                        ` ... +${result.ordersNoDoctor.length - 20}`}
-                    </div>
-                  )}
+                  {result.truelyNoData
+                    .slice(0, 30)
+                    .map((p) => `${p.chartNo} ${p.name}`)
+                    .join('、')}
+                  {result.truelyNoData.length > 30 && ` ... +${result.truelyNoData.length - 30}`}
                 </div>
               </details>
             )}

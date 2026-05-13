@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.4.5 — 2026-05-13
+
+補醫師加 Excel fallback、查 IndexedDB 沒 order 時轉查 `excel-orders.json`。
+
+### 背景
+
+主上問：「無下單紀錄 去看 EXCEL 也沒有嗎」。
+v0.4.4 只查 IndexedDB orders、但有些 patient 在 Excel 原始檔（`dev-data/excel-orders.json`）有 order、
+只是 import 時 patientId 對不上、order 沒進 IndexedDB → 被標 noOrders 但 Excel 其實有資料。
+
+### 變動（`DoctorBackfillSection`）
+
+- **兩階段查詢**：
+  1. IndexedDB orders 先查
+  2. 沒結果 → fallback 查 `dev-data/excel-orders.json`（dynamic import、build 時 bundle）
+- **新分類 source**：標示醫師資料是從 DB 還是 Excel 找來
+- **truelyNoData**（取代原本 noOrders + ordersNoDoctor）：兩階段都查不到才算真沒救
+- **結果卡片顯示拆分**：
+  - 「✓ 補上 X 人 (DB Y / Excel Z)」← 看出多少是從 Excel fallback 救回來的
+  - 每筆右側標 `[DB·N 筆]` 或 `[Excel·N 筆]` 來源 tag
+- ambiguous 也標來源
+
+### 為什麼
+
+讓 Excel orders 變成「資料權威性」的第二層保險：
+- 第一層：IndexedDB orders（user 在 App 編輯過的、最新）
+- 第二層：Excel orders（原始 import 來源、可能有 IndexedDB 漏掉的）
+- 兩層都查無 = 真的需要 user 手動補
+
 ## v0.4.4 — 2026-05-13
 
 新增「補醫師（從下單記錄）」section、從 patient 的 orders 反推回補 patient.doctor。

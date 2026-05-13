@@ -45,6 +45,7 @@ import {
   syncStat,
   syncRead,
   syncWrite,
+  checkPaths,
   type ClinicPaths,
 } from '../lib/helper-client';
 import { parseFolderName } from '../lib/parse-folder-name';
@@ -92,6 +93,7 @@ export default function SettingsPage() {
           <ExcelImportSection />
           <BirthdayBackfillSection />
           <DuplicateNameSection />
+          <SourceFolderHealthSection />
           <DbSection />
         </>
       )}
@@ -2494,6 +2496,204 @@ function DupGroupCard({ group }: { group: DupGroup }) {
         </div>
       )}
     </div>
+  );
+}
+
+/* ─── sourceFolder 健檢（v0.3.19 新增）────────────────────────
+ *   掃所有 patient.sourceFolder + consentPdfPath、用 helper 檢查實際是否存在。
+ *   找出 dead links：可能原因 (1) 資料夾被改名 (2) 被移到別處 (3) 已刪除 (4) NAS 沒連
+ *   結果分組：sourceFolder 死 / consentPdfPath 死 / 兩者皆死 / 完全沒設
+ *   點 chartNo 跳病患詳細頁、可手動處理。
+ */
+type DeadLink = {
+  patient: Patient;
+  field: 'sourceFolder' | 'consentPdfPath';
+  path: string;
+};
+
+function SourceFolderHealthSection() {
+  const allPatients = useLiveQuery(() => db.patients.toArray()) ?? [];
+  const [state, setState] = useState<'idle' | 'checking' | 'done' | 'error'>('idle');
+  const [deadLinks, setDeadLinks] = useState<DeadLink[]>([]);
+  const [stats, setStats] = useState<{
+    totalPatients: number;
+    totalPaths: number;
+    deadCount: number;
+    noSourceFolderCount: number;
+  } | null>(null);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  async function go() {
+    setState('checking');
+    setErrorMsg('');
+    setDeadLinks([]);
+    setStats(null);
+
+    // 集合所有要檢查的路徑、用 Map 對應到 patient + field
+    const pathMap = new Map<string, { patient: Patient; field: 'sourceFolder' | 'consentPdfPath' }[]>();
+    let noSourceFolderCount = 0;
+    for (const p of allPatients) {
+      if (!p.sourceFolder) noSourceFolderCount++;
+      else {
+        if (!pathMap.has(p.sourceFolder)) pathMap.set(p.sourceFolder, []);
+        pathMap.get(p.sourceFolder)!.push({ patient: p, field: 'sourceFolder' });
+      }
+      if (p.consentPdfPath) {
+        if (!pathMap.has(p.consentPdfPath)) pathMap.set(p.consentPdfPath, []);
+        pathMap.get(p.consentPdfPath)!.push({ patient: p, field: 'consentPdfPath' });
+      }
+    }
+
+    const allPaths = [...pathMap.keys()];
+    if (allPaths.length === 0) {
+      setStats({
+        totalPatients: allPatients.length,
+        totalPaths: 0,
+        deadCount: 0,
+        noSourceFolderCount,
+      });
+      setState('done');
+      return;
+    }
+
+    const r = await checkPaths(allPaths);
+    if (r.state === 'helper-down') {
+      setErrorMsg('本機 helper 沒回應');
+      setState('error');
+      return;
+    }
+    if (r.state === 'error') {
+      setErrorMsg(r.message);
+      setState('error');
+      return;
+    }
+
+    const dead: DeadLink[] = [];
+    for (const [path, refs] of pathMap.entries()) {
+      if (!r.results[path]) {
+        for (const ref of refs) {
+          dead.push({ ...ref, path });
+        }
+      }
+    }
+
+    // 排序：先 sourceFolder、再 chartNo ASC
+    dead.sort((a, b) => {
+      if (a.field !== b.field) return a.field === 'sourceFolder' ? -1 : 1;
+      return (a.patient.chartNo ?? '').localeCompare(b.patient.chartNo ?? '');
+    });
+
+    setDeadLinks(dead);
+    setStats({
+      totalPatients: allPatients.length,
+      totalPaths: allPaths.length,
+      deadCount: dead.length,
+      noSourceFolderCount,
+    });
+    setState('done');
+  }
+
+  const sourceFolderDead = deadLinks.filter((d) => d.field === 'sourceFolder');
+  const consentPdfDead = deadLinks.filter((d) => d.field === 'consentPdfPath');
+
+  return (
+    <section className="rounded-xl border border-zinc-800 bg-zinc-900/30">
+      <header className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between">
+        <h2 className="text-sm font-medium text-zinc-200">sourceFolder 健檢</h2>
+        <button
+          onClick={go}
+          disabled={state === 'checking'}
+          className="px-3 py-1.5 rounded-md text-xs border border-zinc-700 text-zinc-200 hover:bg-zinc-800 transition disabled:opacity-50"
+        >
+          {state === 'checking' ? '🩺 檢查中…' : '🩺 立即掃描'}
+        </button>
+      </header>
+      <div className="p-5 space-y-2 text-sm">
+        <p className="text-xs text-zinc-500 leading-relaxed">
+          透過 helper 檢查每位病患的 <code className="text-zinc-400">sourceFolder</code> 跟{' '}
+          <code className="text-zinc-400">consentPdfPath</code> 在實際檔案系統上是否存在。
+          找出「指向不存在」的死路徑 — 可能原因：資料夾被改名 / 移到別處 / 已刪除 / NAS 沒連。
+          <strong className="text-zinc-400 block mt-1">先跑「路徑遷移」把 prefix 統一、再來健檢比較準。</strong>
+        </p>
+
+        {stats && (
+          <div className="grid grid-cols-4 gap-2 text-xs">
+            <StatBox label="病患總數" value={stats.totalPatients} />
+            <StatBox label="掃描路徑" value={stats.totalPaths} />
+            <StatBox label="死路徑" value={stats.deadCount} tone={stats.deadCount > 0 ? 'rose' : 'zinc'} />
+            <StatBox label="無 sourceFolder" value={stats.noSourceFolderCount} tone={stats.noSourceFolderCount > 0 ? 'amber' : 'zinc'} />
+          </div>
+        )}
+
+        {state === 'error' && (
+          <div className="px-3 py-2 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+            ⚠️ {errorMsg}
+          </div>
+        )}
+
+        {state === 'done' && deadLinks.length === 0 && stats && stats.totalPaths > 0 && (
+          <div className="px-3 py-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs">
+            ✓ 所有 {stats.totalPaths} 個路徑都實際存在。
+            {stats.noSourceFolderCount > 0 && (
+              <div className="text-zinc-500 mt-1">
+                注：有 {stats.noSourceFolderCount} 位病患沒設 sourceFolder（placeholder / 手動新增 / 待補）。
+              </div>
+            )}
+          </div>
+        )}
+
+        {sourceFolderDead.length > 0 && (
+          <details className="text-xs" open>
+            <summary className="cursor-pointer text-rose-300 hover:text-rose-200 font-medium">
+              🔴 sourceFolder 指向不存在（{sourceFolderDead.length} 筆）
+            </summary>
+            <div className="mt-2 space-y-1">
+              {sourceFolderDead.map((d, i) => (
+                <DeadLinkRow key={`${d.patient.id}-${i}`} d={d} />
+              ))}
+            </div>
+          </details>
+        )}
+
+        {consentPdfDead.length > 0 && (
+          <details className="text-xs">
+            <summary className="cursor-pointer text-amber-300 hover:text-amber-200 font-medium">
+              🟡 consentPdfPath 指向不存在（{consentPdfDead.length} 筆）
+            </summary>
+            <div className="mt-2 space-y-1">
+              {consentPdfDead.map((d, i) => (
+                <DeadLinkRow key={`${d.patient.id}-${i}`} d={d} />
+              ))}
+            </div>
+          </details>
+        )}
+
+        {state === 'done' && deadLinks.length > 0 && (
+          <p className="text-[11px] text-zinc-600 leading-relaxed pt-1">
+            處理方法：點 chartNo 跳病患詳細頁、手動編輯 sourceFolder 指到正確位置。
+            常見原因：診所在 NAS 改了資料夾名（加備註、整理）但 App 內紀錄沒更新。
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function DeadLinkRow({ d }: { d: DeadLink }) {
+  return (
+    <Link
+      to={`/patients/${d.patient.id}`}
+      className="flex items-center gap-3 px-2 py-1 rounded hover:bg-zinc-800/60 transition group"
+    >
+      <span className="font-mono text-sky-300 group-hover:text-sky-200 min-w-[3em]">
+        {d.patient.chartNo}
+      </span>
+      <span className="text-zinc-300 min-w-[5em]">{d.patient.name}</span>
+      <span className="text-zinc-500 text-[11px] min-w-[6em]">{d.patient.birthday ?? '—'}</span>
+      <span className="text-rose-400/80 text-[10px] truncate flex-1" title={d.path}>
+        {d.path}
+      </span>
+    </Link>
   );
 }
 

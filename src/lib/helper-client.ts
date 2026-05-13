@@ -246,6 +246,30 @@ export async function scanExcel(): Promise<ScanExcelResult> {
   }
 }
 
+// v0.3.19: 批次檢查多個路徑是否實際存在（sourceFolder 健檢用）
+export type CheckPathsResult =
+  | { state: 'ok'; results: Record<string, boolean>; checked: number }
+  | { state: 'error'; message: string }
+  | { state: 'helper-down' };
+
+export async function checkPaths(paths: string[]): Promise<CheckPathsResult> {
+  try {
+    const resp = await fetch(`${HELPER_BASE}/check-paths`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths }),
+    });
+    if (resp.ok) {
+      const data = (await resp.json()) as { results: Record<string, boolean>; checked: number };
+      return { state: 'ok', ...data };
+    }
+    const data = (await resp.json().catch(() => ({ error: 'unknown' }))) as { error: string };
+    return { state: 'error', message: data.error };
+  } catch {
+    return { state: 'helper-down' };
+  }
+}
+
 // 跑 update.ps1 -Silent，等 1-3 分鐘
 // ref 可選：帶 = 切到指定 tag/branch；不帶 = 升 latest origin/main
 export type RunUpdateResult =

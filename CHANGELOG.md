@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.3.19 — 2026-05-13
+
+加 sourceFolder 健檢、找「指向不存在」的死路徑。
+
+### 背景
+
+v0.3.18 的同名病患統計列出多筆 `C:\矯正\...` 舊路徑（dataRoot 已改成 NAS `W:\0矯正追蹤\` 但 sourceFolder 沒同步）。
+跑「路徑遷移」改 prefix 後、可能還有些路徑指到「改過名 / 移過位置 / 刪掉」的資料夾。
+需要工具批次檢查實際存在性。
+
+### 新增
+
+- **helper endpoint `POST /check-paths`**：批次接受 path[]、回 { results: { [path]: bool } }
+  - 走 path remap（W:\0矯正追蹤\... → /data/... 等）、但不過 allowlist（健檢就是要看歷史路徑）
+- **`helper-client.checkPaths()`**：對應 client function
+- **`SourceFolderHealthSection`** 加在設定頁 DuplicateName 後面
+  - 按「🩺 立即掃描」→ 列 4 個統計（總數 / 掃描路徑 / 死路徑 / 無 sourceFolder）
+  - 分兩類列：🔴 sourceFolder 死、🟡 consentPdfPath 死
+  - 每筆可點 chartNo 跳病患詳細頁手動修
+  - 提示處理方法 + 常見原因
+
+### 使用順序建議
+
+1. 先跑「**路徑遷移**」把所有 prefix 統一（C:\矯正\ → W:\0矯正追蹤\）
+2. 再跑「**sourceFolder 健檢**」找 prefix 對但實際資料夾不存在的死指向
+3. 死指向通常是診所在 NAS 改了資料夾名 → 進病患詳細頁手動改 sourceFolder
+
 ## v0.3.18 — 2026-05-13
 
 「同名病患統計」加一鍵合併功能。

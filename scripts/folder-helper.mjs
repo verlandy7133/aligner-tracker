@@ -963,6 +963,41 @@ Rules:
     return;
   }
 
+  // v0.3.19: 批次檢查多個路徑是否實際存在（給 sourceFolder 健檢用）
+  //   POST body: { paths: string[] }
+  //   回 { results: { [path]: boolean } }
+  //   走 path remap (W:\0矯正追蹤\... → /data/... 之類)、但不過 allowlist
+  //   （健檢的目的就是要看歷史路徑是否存在、不該被 allowlist 擋掉）
+  if (url.pathname === '/check-paths' && req.method === 'POST') {
+    (async () => {
+      try {
+        const body = await readJsonBody(req);
+        const parsed = JSON.parse(body);
+        const paths = Array.isArray(parsed?.paths) ? parsed.paths : [];
+        const results = {};
+        for (const p of paths) {
+          if (!p || typeof p !== 'string') {
+            results[p] = false;
+            continue;
+          }
+          try {
+            const remapped = remapPath(p);
+            results[p] = fs.existsSync(remapped);
+          } catch {
+            results[p] = false;
+          }
+        }
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true, results, checked: paths.length }));
+      } catch (e) {
+        res.statusCode = 400;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    })();
+    return;
+  }
+
   // 建立資料夾（含 path remap + allowlist 守門）
   if (url.pathname === '/create-folder') {
     if (readRole() !== 'master') {

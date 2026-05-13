@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.4.10 — 2026-05-14
+
+PhotoEditorModal 改成左右兩欄 layout — 照片預覽左、所有控制右。
+
+### 變動
+
+- modal 寬度：`max-w-2xl` → `max-w-5xl`（從 ~672px 提升到 ~1024px）
+- content 區用 `grid grid-cols-1 lg:grid-cols-2 gap-6` 包左右欄
+  - **左欄**：照片預覽（aspect 4:3）+ 元資料提示（搬到照片下方）
+  - **右欄**：toolbar (5 button) + 縮放/寬度/高度/亮度 sliders + 裁切 section
+- 小螢幕 (`<lg`) 自動 fallback 成單欄上下堆疊（保留 RWD）
+- toolbar 從 `grid-cols-2 sm:grid-cols-5` → `grid-cols-3 sm:grid-cols-5`（右欄較窄時 3 buttons 一行）
+
+### 為什麼
+
+v0.3.10 ~ v0.3.14 連續 5 版加 slider 進 PhotoEditorModal（縮放 / 寬度 / 高度 / 亮度 / 4 邊裁切 = 8 個 slider）、modal 高度累積暴增。v0.4.9 加 scroll 暫解、但 user 還是覺得不直觀。
+兩欄並排徹底解決：照片夠大、控制不滾、視覺平衡。
+
 ## v0.4.9 — 2026-05-14
 
 修：照片編輯 modal 太高、footer (儲存/取消) 被 viewport 截掉看不到。

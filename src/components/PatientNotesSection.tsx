@@ -779,7 +779,7 @@ function PhotoEditorModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-2xl max-h-[90vh] bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl flex flex-col">
+      <div className="w-full max-w-5xl max-h-[90vh] bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl flex flex-col">
         <header className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between flex-shrink-0">
           <div>
             <h3 className="text-lg font-semibold text-zinc-100">編輯 — {slotLabel}</h3>
@@ -792,19 +792,30 @@ function PhotoEditorModal({
             ×
           </button>
         </header>
-        {/* v0.4.9: content 區可滾動、modal 限 90vh、footer 自動 sticky 在底部 */}
+        {/* v0.4.10: 左右兩欄 layout — 照片預覽 + 元資料左、所有控制右 */}
         <div className="p-6 overflow-y-auto flex-1 min-h-0">
-          {/* preview */}
-          <div className="aspect-[4/3] bg-zinc-900 rounded-md overflow-hidden flex items-center justify-center mb-4 border border-zinc-800">
-            <img
-              src={getImageUrl(fullPath)}
-              alt={slotLabel}
-              className="max-w-full max-h-full object-contain transition-transform"
-              style={{ transform, filter }}
-            />
-          </div>
-          {/* toolbar */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* 左欄 — 照片預覽 + 元資料提示 */}
+            <div className="space-y-3">
+              <div className="aspect-[4/3] bg-zinc-900 rounded-md overflow-hidden flex items-center justify-center border border-zinc-800">
+                <img
+                  src={getImageUrl(fullPath)}
+                  alt={slotLabel}
+                  className="max-w-full max-h-full object-contain transition-transform"
+                  style={{ transform, filter }}
+                />
+              </div>
+              <p className="text-[11px] text-zinc-500 leading-relaxed">
+                所有編輯只存「設定」、不動原始檔。其他機從 NAS 拉到 sync.json 也會套用同樣設定。
+                <br />
+                旋轉 {meta.rotate ?? 0}° · 水平翻轉 {meta.flipH ? '是' : '否'} · 垂直翻轉 {meta.flipV ? '是' : '否'} · 縮放 {Math.round(currentScale * 100)}% · 亮度 {Math.round(currentBrightness * 100)}%
+              </p>
+            </div>
+
+            {/* 右欄 — 所有控制 (toolbar + 4 transform slider + crop) */}
+            <div className="space-y-3">
+              {/* toolbar */}
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
             <button
               onClick={() => rotate(-90)}
               className="px-3 py-2 rounded-md text-sm border border-zinc-700 text-zinc-200 hover:bg-zinc-800 transition"
@@ -997,11 +1008,8 @@ function PhotoEditorModal({
               各邊 0~70%、裁掉的區域不顯示、剩下的撐滿 cell（縮放 + 平移）。對邊（上+下、左+右）加總不能超過 95%、否則 crop 不生效。
             </p>
           </div>
-          <p className="text-[11px] text-zinc-500 mt-3">
-            所有編輯只存「設定」、不動原始檔。其他機從 NAS 拉到 sync.json 也會套用同樣設定。
-            <br />
-            旋轉 {meta.rotate ?? 0}° · 水平翻轉 {meta.flipH ? '是' : '否'} · 垂直翻轉 {meta.flipV ? '是' : '否'} · 縮放 {Math.round(currentScale * 100)}% · 亮度 {Math.round(currentBrightness * 100)}%
-          </p>
+            </div>
+          </div>
         </div>
         <footer className="px-6 py-3 border-t border-zinc-800 flex items-center justify-end gap-2 flex-shrink-0">
           <button

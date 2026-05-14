@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
@@ -23,6 +23,7 @@ import PatientNotesSection from '../components/PatientNotesSection';
 import { callHelper, findAndOpenPdf, createFolder, describeHelperFailure } from '../lib/helper-client';
 import { READ_ONLY } from '../lib/read-only';
 import { openAuu } from '../lib/auu';
+import { getPaths } from '../lib/helper-client';
 
 // 把西元 birthday (YYYY-MM-DD) 轉成民國格式 (民國YYMMDD 或 民國YYYMMDD)
 // 例：1993-11-02 → 821102；2015-12-07 → 1041207
@@ -36,11 +37,18 @@ function birthdayToROCFolder(birthday: string | null): string | null {
 }
 
 // 推算病患資料夾的 conventional path（無前綴的 active 命名）
-// 路徑樣本：D:\矯正\病患資料夾\821102嚴家彬
-function deriveConventionalSourceFolder(birthday: string | null, name: string): string | null {
+// 路徑樣本：<dataRoot>\病患資料夾\821102嚴家彬
+// v0.5.2 修：之前寫死 D:\矯正\、跨機 dataRoot 變 NAS path 後 derived 還用舊 prefix、
+// 導致 patient.sourceFolder 空時點「建立 / 開資料夾」跳到不存在路徑、prompt 建空資料夾
+function deriveConventionalSourceFolder(
+  birthday: string | null,
+  name: string,
+  dataRoot: string,
+): string | null {
   const roc = birthdayToROCFolder(birthday);
   if (!roc || !name) return null;
-  return `D:\\矯正\\病患資料夾\\${roc}${name}`;
+  const root = (dataRoot || 'D:\\矯正').replace(/\\+$/, '');
+  return `${root}\\病患資料夾\\${roc}${name}`;
 }
 
 export default function PatientDetailPage() {
@@ -49,6 +57,14 @@ export default function PatientDetailPage() {
   const [editingTarget, setEditingTarget] = useState<Patient | 'new' | null>(null);
 
   const patient = useLiveQuery(async () => (id ? await db.patients.get(id) : undefined), [id]);
+
+  // v0.5.2: 拿當前 dataRoot 給 deriveConventionalSourceFolder 用、不再寫死 D:\矯正\
+  const [dataRoot, setDataRoot] = useState<string>('D:\\矯正');
+  useEffect(() => {
+    getPaths().then((r) => {
+      if (r.state === 'ok' && r.paths?.dataRoot) setDataRoot(r.paths.dataRoot);
+    });
+  }, []);
   const orders =
     useLiveQuery(
       async () => (id ? await db.orders.where('patientId').equals(id).toArray() : []),
@@ -119,7 +135,7 @@ export default function PatientDetailPage() {
           {/* readOnly mode：所有 mutation 按鈕 + 開檔按鈕都隱藏（iPad 上沒 file://、helper service 也不存在） */}
           {!READ_ONLY && (() => {
             // 優先用 patient.sourceFolder，沒有就 derive conventional path（需要生日）
-            const derived = deriveConventionalSourceFolder(patient.birthday, patient.name);
+            const derived = deriveConventionalSourceFolder(patient.birthday, patient.name, dataRoot);
             const effectiveFolder = patient.sourceFolder || derived;
             return (
               <button

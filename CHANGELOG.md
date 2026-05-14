@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.5.2 — 2026-05-15
+
+修 `deriveConventionalSourceFolder` 寫死 `D:\矯正\` prefix 的 bug。
+
+### 背景
+
+D 機接 NAS、dataRoot 改成 `D:\診所nas 矯正追蹤\SynologyDrive`、跑完路徑遷移後、user 點某些病患（如 0002 鄧宛唏、sourceFolder 為空字串）的「📁 建立 / 開資料夾」button、跳出「資料夾不存在、要建立嗎？」alert、顯示路徑卻是 **`D:\矯正\病患資料夾\...`** — 舊 prefix。
+
+### Root cause
+
+`PatientDetailPage` line 40-44：
+```ts
+function deriveConventionalSourceFolder(birthday, name) {
+  ...
+  return `D:\\矯正\\病患資料夾\\${roc}${name}`;  // ← 寫死
+}
+```
+
+當 `patient.sourceFolder` 空字串、UI 自動 fallback 用 derived path 組「假設位置」、但 prefix 永遠是 `D:\矯正\`、不論本機 dataRoot 是 NAS / W: / 別的。
+
+### 修
+
+- function 加 `dataRoot: string` 參數、改用 `${dataRoot}\病患資料夾\<roc><name>`
+- PatientDetailPage 用 `useEffect + getPaths()` fetch 當前 dataRoot 存 state
+- call site 傳入 dataRoot
+- 安全 fallback：dataRoot 抓不到時用 `D:\矯正`（跟原行為一致）
+
+### 順手發現未修
+
+- `src/lib/before-after.ts` line 19 也寫死 `D:\矯正\before-after-照片整理` — 等矯正對照 session 整合過來時再一起改
+
 ## v0.5.1 — 2026-05-15
 
 AUU 奧優後台整合 — 病患詳細頁加「🌐 奧優」button。

@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.4.15 — 2026-05-14
+
+`import-clinic-takeover.py` 補第 4 分頁（轉隱適美 等轉品牌）generic parser、
+讓 v0.4.14 預留的補醫師階段 3 fallback 正式生效。
+
+### 變動（`scripts/import-clinic-takeover.py`）
+
+- 新增 `OUT_TRANSFERRED = dev-data/excel-transferred.json` + `TRANSFER_SHEET_INDEX = 3`（0-based、即第 4 分頁）
+- 「生產資料庫」+「牙套下單」處理完後追加跑第 4 分頁：
+  - **Generic header scan**（不依賴固定 col index）— 抓 row 1 內所有 cell value 當 header
+  - 用 keyword match 找欄位：
+    - 姓名：`姓名 / 病患姓名 / 病人姓名 / 病患`
+    - 醫師：`醫師 / 主治醫師 / 主治`
+    - 生日：`生日 / 出生 / 出生年月日`
+  - 從 row 2 開始抽資料、產出 `{ patientName, doctor, birthday, sourceSheet }`
+- log 詳細列：分頁名、找到的 headers dict、各欄 col index、抽出 row 數
+- 若 Excel 不足 4 分頁、或 header 找不到「姓名」欄、silent skip + warn 不報錯
+- 統計 print 加「轉品牌分頁 rows: N」
+
+### 使用
+
+跑「設定 → Excel 匯入 → 掃描並套用」就會：
+1. （原有）讀生產資料庫 + 牙套下單
+2. **（新）讀第 4 分頁、產 excel-transferred.json**
+3. UI 重 build / 重整後、補醫師三階段 fallback 階段 3 就生效
+
+### 注意
+
+- v0.4.14 內已用 `import.meta.glob` 預載 `excel-transferred.json`、檔不存在不會 build fail
+- 第一次跑 python 後生成檔、需重 build（`npm run build`）讓 vite 重 bundle、UI 才看得到階段 3 資料
+- 若第 4 分頁 schema 不一樣（不是「姓名」欄、是「客戶」之類）→ generic scan 會 fail、log 印 warn、加新 keyword 進 NAME_KEYS / DOCTOR_KEYS / BIRTHDAY_KEYS 即可
+
 ## v0.4.14 — 2026-05-14
 
 兩條新規則：技工所從資料夾名 backfill + 補醫師加「轉品牌」分頁 fallback。

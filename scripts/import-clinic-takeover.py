@@ -28,6 +28,9 @@ from openpyxl import load_workbook
 PATIENTS_JSON = Path('dev-data/patients-import.json')
 OUT_ORDERS = Path('dev-data/excel-orders.json')
 OUT_PATIENT_UPDATES = Path('dev-data/excel-patient-updates.json')
+# v0.4.14 加：第 4 個分頁（轉隱適美 等轉品牌資料）的 dump、給 DoctorBackfillSection 階段 3 fallback 用
+OUT_TRANSFERRED = Path('dev-data/excel-transferred.json')
+TRANSFER_SHEET_INDEX = 3  # 0-based: 第 4 個分頁
 
 LAB_MAP = {
     'invisalign': '隱適美',
@@ -396,6 +399,70 @@ def main():
             indent=2,
         )
 
+    # ─── Sheet 4 (v0.4.14): 轉品牌分頁 (轉隱適美、轉綻雅 等) ─────
+    # generic header scan、不依賴固定欄位 layout
+    # 抽出 patientName / doctor / birthday / sourceSheet 給 DoctorBackfillSection 用
+    transferred_rows = []
+    sheet_names = wb.sheetnames
+    if len(sheet_names) > TRANSFER_SHEET_INDEX:
+        transfer_sheet_name = sheet_names[TRANSFER_SHEET_INDEX]
+        sh4 = wb[transfer_sheet_name]
+        print(f'\n[takeover] 第 {TRANSFER_SHEET_INDEX + 1} 個分頁: 「{transfer_sheet_name}」 ({sh4.max_row} rows)')
+
+        # Scan header (row 1)
+        headers = {}
+        for c in range(1, sh4.max_column + 1):
+            v = sh4.cell(row=1, column=c).value
+            if v:
+                headers[c] = str(v).strip()
+        print(f'[takeover]   headers: {headers}')
+
+        NAME_KEYS = ['姓名', '病患姓名', '病人姓名', '病患']
+        DOCTOR_KEYS = ['醫師', '主治醫師', '主治']
+        BIRTHDAY_KEYS = ['生日', '出生', '出生年月日']
+
+        def find_col(keys):
+            for col, h in headers.items():
+                for k in keys:
+                    if k in h:
+                        return col
+            return None
+
+        name_col = find_col(NAME_KEYS)
+        doctor_col = find_col(DOCTOR_KEYS)
+        birthday_col = find_col(BIRTHDAY_KEYS)
+
+        if name_col is None:
+            print(f'[takeover]   ⚠ 找不到「姓名」欄、跳過此分頁（header 沒含「姓名」/「病患」等關鍵字）')
+        else:
+            print(f'[takeover]   姓名 col={name_col}, 醫師 col={doctor_col}, 生日 col={birthday_col}')
+            for r in range(2, sh4.max_row + 1):
+                name_v = sh4.cell(row=r, column=name_col).value
+                if not name_v:
+                    continue
+                row_data = {
+                    'patientName': str(name_v).strip(),
+                    'sourceSheet': transfer_sheet_name,
+                    'doctor': '',
+                }
+                if doctor_col:
+                    d = sh4.cell(row=r, column=doctor_col).value
+                    if d:
+                        row_data['doctor'] = str(d).strip()
+                if birthday_col:
+                    bday = sh4.cell(row=r, column=birthday_col).value
+                    if isinstance(bday, datetime):
+                        row_data['birthday'] = bday.strftime('%Y-%m-%d')
+                    elif bday:
+                        row_data['birthday'] = str(bday)
+                transferred_rows.append(row_data)
+            print(f'[takeover]   抽出 {len(transferred_rows)} rows')
+    else:
+        print(f'\n[takeover] Excel 不足 {TRANSFER_SHEET_INDEX + 1} 個分頁、跳過轉品牌處理 (現有 {len(sheet_names)} 個)')
+
+    with open(OUT_TRANSFERRED, 'w', encoding='utf-8') as f:
+        json.dump({'count': len(transferred_rows), 'rows': transferred_rows}, f, ensure_ascii=False, indent=2)
+
     # ─── 統計 ────────────────────────────────
     print()
     print('=== Takeover Import 統計 ===')
@@ -403,6 +470,7 @@ def main():
     print(f'  patient updates: {len(patient_updates)}')
     print(f'  自動補建新病患: {len(new_patients)}')
     print(f'  同名多人警告: {len(multi_match)}')
+    print(f'  轉品牌分頁 rows: {len(transferred_rows)}')
     by_progress = {}
     for o in orders:
         by_progress[o['progress']] = by_progress.get(o['progress'], 0) + 1

@@ -1,5 +1,53 @@
 # Changelog
 
+## v0.5.0 — 2026-05-15
+
+技工所名稱統一：「**美鉑**」→「**鎂鉑**」（跟奧優 AUU 後台 / 廠商正式名稱對齊）。
+patch 15 上限、minor bump 跳 v0.5.0。
+
+### 背景
+
+跟主上一起接奧優 AUU 客戶後台、發現官方 title 寫「**AUU 鎂鉑數位矯正**」、
+跟 aligner-tracker 內預設 lab 名「美鉑」字不同（同公司、不同寫法）。
+主上確認改用「鎂鉑」統一。
+
+### 改動（除 CHANGELOG 歷史 entry 保留外、全 codebase replace）
+
+- `src/lib/labs.ts` DEFAULT_LABS — id `meibo` 保留、name 改「鎂鉑」
+- `src/lib/labs.ts` 註解
+- `src/types/Patient.ts` Order.lab 註解
+- `src/components/OrderFormModal.tsx` 預設 lab 字串
+- `src/pages/SettingsPage.tsx` LabBackfillSection 註解、還原預設 confirm message
+- `scripts/import-clinic-takeover.py` LAB_MAP × 3 + fallback × 1
+- `scripts/import-excel-orders.py` LAB_MAP × 3 + fallback × 1
+- `scripts/import-supplementary-orders.py` 預設 lab × 1
+- `scripts/build-distributable.mjs` DEFAULT_LABS
+
+### LabSection 加批次重命名工具
+
+修改 DEFAULT_LABS name 不會自動同步既有 `db.orders[].lab` 字串（rename ≠ migrate）。
+LabSection 展開後新增 dashed border 區「**🔧 重命名…**」button：
+
+- prompt 舊 lab 名（例「美鉑」）+ 新名（預設「鎂鉑」）
+- 掃 db.orders、列符合的 N 筆、confirm 後 batch update
+- 不在「設定→技工所列表」內動的、order 不變
+- 通用工具、未來任何 rename 都可用
+
+### 樓上筆電升級流程
+
+1. 切換到 main v0.5.0
+2. 設定 → 「技工所管理」展開 → 看到「鎂鉑 / 世宇 / 隱適美」(若是 defaults)
+3. 按「🔧 重命名…」→ 舊「美鉑」→ 新「鎂鉑」→ 確認、批次改既有 order
+
+### 順帶：奧優 AUU URL 結構（供下版整合參考）
+
+- `/client/patient/list` — 病患列表（search 是 client-side、URL 不帶 query）
+- `/client/patient/detail/{auuId}` — 病患詳細（auuId = 純數字、5 位）
+- 編號格式：`A26681`（A + 5 位）
+- 後台姓名顯示「{name}-{doctor 簡稱}」格式（跟 aligner-tracker schema 不同）
+
+下版可考慮：Patient 加 `auuId?: string`、編輯表單可填、有填就 button 直跳 detail。
+
 ## v0.4.15 — 2026-05-14
 
 `import-clinic-takeover.py` 補第 4 分頁（轉隱適美 等轉品牌）generic parser、

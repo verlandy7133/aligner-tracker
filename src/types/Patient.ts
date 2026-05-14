@@ -169,7 +169,7 @@ export type Order = {
   actualDate: string | null; // 實際收件日
   nextStep: string;
   notes: string;
-  lab: string; // 技工所 美鉑/世宇/隱適美
+  lab: string; // 技工所 鎂鉑/世宇/隱適美
 
   createdAt: string;
   updatedAt: string;

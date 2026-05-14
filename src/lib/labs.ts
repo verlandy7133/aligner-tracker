@@ -1,7 +1,7 @@
 // 技工所動態管理
 //
 // 從寫死改成存在 settings table (key = 'labs')，可在 SettingsPage 增刪改。
-// 預設提供 3 個 (美鉑 / 世宇 / 隱適美) 對應原本固定選項。
+// 預設提供 3 個 (鎂鉑 / 世宇 / 隱適美) 對應原本固定選項。
 // 修改名稱不影響舊 orders（orders.lab 是字串，存的是當時的名字快照）。
 
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -15,7 +15,7 @@ export type Lab = {
 };
 
 export const DEFAULT_LABS: Lab[] = [
-  { id: 'meibo', name: '美鉑', color: '#a855f7' }, // violet
+  { id: 'meibo', name: '鎂鉑', color: '#a855f7' }, // violet
   { id: 'shiyu', name: '世宇', color: '#f59e0b' }, // amber
   { id: 'invisalign', name: '隱適美', color: '#0ea5e9' }, // sky
 ];

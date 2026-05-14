@@ -44,9 +44,9 @@ OUT_PATIENT_UPDATES = Path('dev-data/excel-patient-updates.json')
 
 LAB_MAP = {
     'invisalign': '隱適美',
-    'riyue': '美鉑',
-    'zenyum': '美鉑',
-    'retainer': '美鉑',
+    'riyue': '鎂鉑',
+    'zenyum': '鎂鉑',
+    'retainer': '鎂鉑',
 }
 
 PROGRESS_VALID = {'尚未開始', '已下單牙套', '診所已收到牙套', '已完成'}
@@ -318,7 +318,7 @@ def main():
                     rest,
                     str(row['notes']).strip() if row['notes'] else '',
                 ])).strip(),
-                'lab': LAB_MAP.get(patient['productLine'], '美鉑'),
+                'lab': LAB_MAP.get(patient['productLine'], '鎂鉑'),
                 'createdAt': now_iso,
                 'updatedAt': now_iso,
             })

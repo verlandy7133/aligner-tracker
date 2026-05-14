@@ -41,7 +41,7 @@ const EMPTY_FORM: FormState = {
   patientId: '',
   date: today(),
   doctor: '',
-  lab: '美鉑',
+  lab: '鎂鉑',
   batchType: '新',
   alignerRange: '',
   progress: '尚未開始',

@@ -296,7 +296,7 @@ def main():
                 str(row['notes']).strip() if row['notes'] else '',
                 '(補充)',
             ])).strip(),
-            'lab': '美鉑',  # 預設，user 之後可改
+            'lab': '鎂鉑',  # 預設，user 之後可改
             'createdAt': datetime.now().isoformat(),
             'updatedAt': datetime.now().isoformat(),
         })

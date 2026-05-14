@@ -1218,6 +1218,35 @@ function LabSection() {
       </header>
       {expanded && (
         <div className="p-3 space-y-2">
+          {/* v0.5.0: 批次重命名 order.lab 工具 (rename lab 不會 cascade 到既有 order) */}
+          <div className="px-3 py-2 rounded-md bg-zinc-950/40 border border-dashed border-zinc-700 text-[11px] text-zinc-500">
+            <div className="flex items-center justify-between gap-2">
+              <span>批次重命名既有 order.lab（rename lab name 不會自動同步舊 order）</span>
+              <button
+                onClick={async () => {
+                  const oldName = prompt('要重命名的舊 lab 名稱（例：美鉑）');
+                  if (!oldName?.trim()) return;
+                  const newName = prompt(`改成新名稱`, '鎂鉑');
+                  if (!newName?.trim()) return;
+                  const all = await db.orders.toArray();
+                  const targets = all.filter((o) => (o.lab ?? '').trim() === oldName.trim());
+                  if (targets.length === 0) {
+                    alert(`沒有 order.lab="${oldName.trim()}" 的紀錄、無動作`);
+                    return;
+                  }
+                  if (!confirm(`把 ${targets.length} 筆 order 的 lab="${oldName.trim()}" 改成 "${newName.trim()}"？\n不可復原。`)) return;
+                  const nowIso = new Date().toISOString();
+                  for (const o of targets) {
+                    await db.orders.update(o.id, { lab: newName.trim(), updatedAt: nowIso });
+                  }
+                  alert(`✓ 已重命名 ${targets.length} 筆 order`);
+                }}
+                className="px-2 py-1 rounded text-[11px] border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition flex-shrink-0"
+              >
+                🔧 重命名…
+              </button>
+            </div>
+          </div>
           {labs.length === 0 && (
             <p className="text-sm text-zinc-500 px-2 py-3">尚無技工所</p>
           )}
@@ -2625,7 +2654,7 @@ function DoctorBackfillSection() {
  *     - 唯一 1 個 lab name match → 自動補 order.lab
  *     - 多個 lab match → 標 ambiguous 不動
  *     - 沒 match → 標 not-found 不動
- *   技工所列表動態 from useLabs() — 預設「美鉑 / 世宇 / 隱適美」、user 可在設定改
+ *   技工所列表動態 from useLabs() — 預設「鎂鉑 / 世宇 / 隱適美」、user 可在設定改
  */
 function LabBackfillSection() {
   const labs = useLabs();
@@ -3465,7 +3494,7 @@ function DbSection() {
   }
 
   async function resetLabsToDefaults() {
-    if (!confirm('還原預設技工所 (美鉑/世宇/隱適美)？目前自定義的技工所會被覆寫。')) return;
+    if (!confirm('還原預設技工所 (鎂鉑/世宇/隱適美)？目前自定義的技工所會被覆寫。')) return;
     await saveLabs(DEFAULT_LABS);
   }
   async function resetDoctorsToDefaults() {

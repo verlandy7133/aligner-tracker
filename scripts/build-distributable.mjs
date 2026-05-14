@@ -286,7 +286,7 @@ async function buildBackupFromDevData() {
     {
       key: 'labs',
       value: [
-        { id: 'meibo', name: '美鉑', color: '#a855f7' },
+        { id: 'meibo', name: '鎂鉑', color: '#a855f7' },
         { id: 'shiyu', name: '世宇', color: '#f59e0b' },
         { id: 'invisalign', name: '隱適美', color: '#0ea5e9' },
       ],

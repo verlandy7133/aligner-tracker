@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.5.1 — 2026-05-15
+
+AUU 奧優後台整合 — 病患詳細頁加「🌐 奧優」button。
+
+### 新增
+
+- **`src/lib/auu.ts`**：URL helper
+  - `buildAuuUrl(auuId)`：有 auuId → `/client/patient/detail/<id>`、沒填 → `/client/patient/list`
+  - `openAuu(auuId)`：`window.open` new tab、`noopener,noreferrer` 安全
+  - 容錯：user 輸入「A26681」帶 prefix、自動去掉「A」
+- **`Patient.auuId?: string`**：optional、純數字、約 5 位（後台顯示 A 前綴）
+- **`PatientFormModal` 加「奧優編號」欄位**：在「口掃資訊」下、可選、placeholder 提示 paste 「A26681」自動 strip
+- **`PatientDetailPage` header 加 button**：
+  - 有 auuId → 顯示「🌐 奧優 A26681」、點 → 跳該 patient detail
+  - 沒 auuId → 顯示「🌐 奧優」、點 → 跳 list page、tooltip 提醒「下次直跳請填編號」
+  - 新分頁開、不影響 aligner-tracker tab
+
+### 為什麼
+
+跟主上一起在奧優後台確認 URL 結構（2026-05-15 同 session）。
+方案 A（單向跳轉、不抓 auuId mapping）最務實 — 立即可用、之後 user 慢慢填 auuId 上來就直接跳該患者頁。
+
+### 後續可做（不急）
+
+- 從奧優匯出 patient list（含 A 編號 + 姓名）、batch import 對映進 patient.auuId
+- 或 build 一個對映工具：列「有姓名沒 auuId 的 patient」、user 一筆筆 fill
+
 ## v0.5.0 — 2026-05-15
 
 技工所名稱統一：「**美鉑**」→「**鎂鉑**」（跟奧優 AUU 後台 / 廠商正式名稱對齊）。

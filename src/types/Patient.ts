@@ -118,6 +118,11 @@ export type Patient = {
   consentPdfPath: string | null;
   scanInfo: string | null; // 口掃資訊 例 "1/28 5000" 或 "1/28 5000(2/4付)"
   doctor: string | null; // 主治醫師 例 "陳執中" / "林英辰" / "張綺真"
+
+  // v0.5.1: 奧優 AUU 後台病患編號（純數字、約 5 位、例 26681 對應後台 A26681）
+  // 有填 → PatientDetailPage 「🌐 奧優」button 直跳 detail page
+  // 沒填 → button fallback 跳 list page、user 自己搜
+  auuId?: string;
   flags: PatientFlag[];
   notes: string;
   sourceFolder: string;

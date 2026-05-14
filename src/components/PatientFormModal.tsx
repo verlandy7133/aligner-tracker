@@ -30,6 +30,7 @@ type FormState = {
   birthday: string;
   doctor: string;
   scanInfo: string;
+  auuId: string; // v0.5.1: 奧優後台 patient id
   productLine: ProductLine;
   status: PatientStatus;
   hasConsent: boolean;
@@ -52,6 +53,7 @@ const EMPTY_FORM: FormState = {
   birthday: '',
   doctor: '',
   scanInfo: '',
+  auuId: '',
   productLine: 'riyue',
   status: 'active',
   hasConsent: true,
@@ -78,6 +80,7 @@ function patientToForm(p: Patient): FormState {
     birthday: p.birthday ?? '',
     doctor: p.doctor ?? '',
     scanInfo: p.scanInfo ?? '',
+    auuId: p.auuId ?? '',
     productLine: p.productLine,
     status: p.status,
     hasConsent: p.hasConsent,
@@ -267,6 +270,7 @@ export default function PatientFormModal({ target, prefillName, onClose }: Patie
       birthday: form.birthday || null,
       doctor: form.doctor.trim() || null,
       scanInfo: form.scanInfo.trim() || null,
+      auuId: form.auuId.trim().replace(/^A/i, '') || undefined,
       productLine: form.productLine,
       status: form.status,
       // track / refinementLevel 是 derived 欄位（從 orders 推），form 不編輯
@@ -407,6 +411,14 @@ export default function PatientFormModal({ target, prefillName, onClose }: Patie
                 onChange={(e) => setForm({ ...form, scanInfo: e.target.value })}
                 className={inputCls}
                 placeholder="例：1/28 5000"
+              />
+            </Field>
+            <Field label="奧優編號">
+              <input
+                value={form.auuId}
+                onChange={(e) => setForm({ ...form, auuId: e.target.value })}
+                className={inputCls}
+                placeholder="例：26681（不含 A、可貼 A26681 系統自動去除）"
               />
             </Field>
           </Section>

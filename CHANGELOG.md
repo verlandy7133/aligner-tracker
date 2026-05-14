@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.4.14 — 2026-05-14
+
+兩條新規則：技工所從資料夾名 backfill + 補醫師加「轉品牌」分頁 fallback。
+
+### 規則 1：補技工所 from 資料夾名（完整實作）
+
+新 section `LabBackfillSection`、加在 `DoctorBackfillSection` 後：
+
+- **候選**：order.lab 空
+- **邏輯**：對每個 order、查 patient.sourceFolder + allSourceFolders + order.notes 是否含技工所名
+  - 唯一 1 個 match → 自動補 order.lab
+  - 多個 / 沒 match → 標 ambiguous / not-found 不動
+- **技工所列表動態 from useLabs()**：預設「美鉑 / 世宇 / 隱適美」、user 可在「技工所管理」改
+
+### 規則 2：補醫師加「轉品牌」分頁 fallback（UI 預留 + 待 python 完整 import）
+
+`DoctorBackfillSection` 從兩階段 → 三階段：
+
+1. IndexedDB orders（v0.4.4）
+2. `dev-data/excel-orders.json`（v0.4.5）
+3. **`dev-data/excel-transferred.json` ← v0.4.14 新增**（Excel「轉隱適美」/「轉綻雅」等轉品牌分頁）
+
+UI 顯示 source 拆三類：DB / Excel / 轉品牌、各自 chip 顏色 (sky / amber / fuchsia)。
+
+### Python script 待補
+
+`scripts/import-clinic-takeover.py` 目前只讀「生產資料庫」+「牙套下單」兩 sheet。
+要讓階段 3 fallback 生效、需擴充 python 讀「轉隱適美」等 sheet、產出 `dev-data/excel-transferred.json`、
+schema：`{ rows: [{ patientName, doctor, sourceSheet }] }`。
+
+此版動態 import 該 JSON、找不到檔 catch skip、不影響其他階段運作。
+
 ## v0.4.13 — 2026-05-14
 
 預留「治療前後對比 HTML」整合接口（library 層）。

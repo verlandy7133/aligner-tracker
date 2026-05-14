@@ -93,6 +93,7 @@ export default function SettingsPage() {
           <ExcelImportSection />
           <BirthdayBackfillSection />
           <DoctorBackfillSection />
+          <LabBackfillSection />
           <DuplicateNameSection />
           <SourceFolderHealthSection />
           <DbSection />
@@ -2310,10 +2311,10 @@ function DoctorBackfillSection() {
       chartNo: string;
       name: string;
       doctor: string;
-      source: 'db' | 'excel';
+      source: 'db' | 'excel' | 'transferred';
       orderCount: number;
     }[];
-    ambiguous: { chartNo: string; name: string; doctors: string[]; source: 'db' | 'excel' }[];
+    ambiguous: { chartNo: string; name: string; doctors: string[]; source: 'db' | 'excel' | 'transferred' }[];
     truelyNoData: { chartNo: string; name: string }[];
   } | null>(null);
 
@@ -2372,18 +2373,41 @@ function DoctorBackfillSection() {
       excelOrdersByName = new Map();
     }
 
+    // 階段 3 (v0.4.14 加): dev-data/excel-transferred.json — Excel「轉隱適美」等轉品牌分頁
+    //   Python script 需先加讀該 sheet (目前 import-clinic-takeover.py 只讀生產資料庫 + 牙套下單)
+    //   用 import.meta.glob (build-time glob、檔不存在不 error、只是 modules 空 object)
+    //   schema 假設：{ rows: [{ patientName, doctor, sourceSheet }] }
+    let transferredByName = new Map<string, { doctor: string; sheet: string }[]>();
+    try {
+      const transferredModules = import.meta.glob('../../dev-data/excel-transferred.json');
+      const loader = Object.values(transferredModules)[0];
+      if (loader) {
+        const mod = (await loader()) as {
+          default: { rows: { patientName: string; doctor: string; sourceSheet?: string }[] };
+        };
+        for (const r of mod.default?.rows ?? []) {
+          const key = r.patientName?.trim();
+          if (!key) continue;
+          if (!transferredByName.has(key)) transferredByName.set(key, []);
+          transferredByName.get(key)!.push({ doctor: r.doctor, sheet: r.sourceSheet ?? '轉品牌' });
+        }
+      }
+    } catch {
+      transferredByName = new Map();
+    }
+
     const matched: {
       chartNo: string;
       name: string;
       doctor: string;
-      source: 'db' | 'excel';
+      source: 'db' | 'excel' | 'transferred';
       orderCount: number;
     }[] = [];
     const ambiguous: {
       chartNo: string;
       name: string;
       doctors: string[];
-      source: 'db' | 'excel';
+      source: 'db' | 'excel' | 'transferred';
     }[] = [];
     const truelyNoData: { chartNo: string; name: string }[] = [];
 
@@ -2441,7 +2465,33 @@ function DoctorBackfillSection() {
         continue;
       }
 
-      // 兩邊都沒救
+      // 階段 3 (v0.4.14) fallback: 查 Excel 轉品牌分頁 (轉隱適美 等)
+      const transferredList = transferredByName.get(p.name) ?? [];
+      const transferredDoctors = [
+        ...new Set(transferredList.map((r) => r.doctor?.trim()).filter((d): d is string => !!d)),
+      ];
+      if (transferredDoctors.length === 1) {
+        await db.patients.update(p.id, { doctor: transferredDoctors[0], updatedAt: nowIso });
+        matched.push({
+          chartNo: p.chartNo,
+          name: p.name,
+          doctor: transferredDoctors[0],
+          source: 'transferred',
+          orderCount: transferredList.length,
+        });
+        continue;
+      }
+      if (transferredDoctors.length > 1) {
+        ambiguous.push({
+          chartNo: p.chartNo,
+          name: p.name,
+          doctors: transferredDoctors,
+          source: 'transferred',
+        });
+        continue;
+      }
+
+      // 三階段都沒救
       truelyNoData.push({ chartNo: p.chartNo, name: p.name });
     }
 
@@ -2471,10 +2521,11 @@ function DoctorBackfillSection() {
       </header>
       <div className="p-5 space-y-2 text-sm">
         <p className="text-xs text-zinc-500">
-          掃缺醫師的病患、兩階段查詢補回：
+          掃缺醫師的病患、三階段查詢補回：
           <strong className="text-zinc-300 block mt-1">
-            (1) 查 IndexedDB orders → (2) 若沒、fallback 查{' '}
-            <code className="text-zinc-400">dev-data/excel-orders.json</code>（這份 Excel 原始 import 結果）
+            (1) IndexedDB orders → (2)
+            <code className="text-zinc-400 mx-1">dev-data/excel-orders.json</code> → (3)
+            <code className="text-zinc-400 mx-1">dev-data/excel-transferred.json</code>（轉隱適美等分頁）
           </strong>
           唯一一位醫師才補。completed / transferred-out 的病患不算。
         </p>
@@ -2488,9 +2539,10 @@ function DoctorBackfillSection() {
             <div className="px-3 py-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
               ✓ 補上 {result.matched.length} / {result.candidatesCount} 人
               {' '}(DB {result.matched.filter((m) => m.source === 'db').length}
-              {' '}/ Excel {result.matched.filter((m) => m.source === 'excel').length})
+              {' '}/ Excel {result.matched.filter((m) => m.source === 'excel').length}
+              {' '}/ 轉品牌 {result.matched.filter((m) => m.source === 'transferred').length})
               {result.ambiguous.length > 0 && ` · 多位醫師 ${result.ambiguous.length}`}
-              {result.truelyNoData.length > 0 && ` · 兩邊都查無 ${result.truelyNoData.length}`}
+              {result.truelyNoData.length > 0 && ` · 三邊都查無 ${result.truelyNoData.length}`}
             </div>
             {result.matched.length > 0 && (
               <details>
@@ -2506,10 +2558,20 @@ function DoctorBackfillSection() {
                       <span className="text-emerald-400/80">{m.doctor}</span>
                       <span
                         className={`text-[10px] ml-1 ${
-                          m.source === 'db' ? 'text-sky-400/70' : 'text-amber-400/70'
+                          m.source === 'db'
+                            ? 'text-sky-400/70'
+                            : m.source === 'excel'
+                              ? 'text-amber-400/70'
+                              : 'text-fuchsia-400/70'
                         }`}
                       >
-                        [{m.source === 'db' ? `DB·${m.orderCount} 筆` : `Excel·${m.orderCount} 筆`}]
+                        [
+                        {m.source === 'db'
+                          ? `DB·${m.orderCount} 筆`
+                          : m.source === 'excel'
+                            ? `Excel·${m.orderCount} 筆`
+                            : `轉品牌·${m.orderCount} 筆`}
+                        ]
                       </span>
                     </div>
                   ))}
@@ -2547,6 +2609,178 @@ function DoctorBackfillSection() {
                     .map((p) => `${p.chartNo} ${p.name}`)
                     .join('、')}
                   {result.truelyNoData.length > 30 && ` ... +${result.truelyNoData.length - 30}`}
+                </div>
+              </details>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* ─── 從資料夾名補技工所（v0.4.14 新增）─────────────────────────
+ *   候選：order.lab 空
+ *   邏輯：對每個 order、查 patient.sourceFolder + allSourceFolders 是否含技工所名
+ *     - 唯一 1 個 lab name match → 自動補 order.lab
+ *     - 多個 lab match → 標 ambiguous 不動
+ *     - 沒 match → 標 not-found 不動
+ *   技工所列表動態 from useLabs() — 預設「美鉑 / 世宇 / 隱適美」、user 可在設定改
+ */
+function LabBackfillSection() {
+  const labs = useLabs();
+  const [state, setState] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+  const [error, setError] = useState('');
+  const [result, setResult] = useState<{
+    candidatesCount: number;
+    matched: { chartNo: string; name: string; lab: string; date: string }[];
+    ambiguous: { chartNo: string; name: string; labs: string[]; date: string }[];
+    notFound: { chartNo: string; name: string; date: string }[];
+  } | null>(null);
+
+  const candidateCount =
+    useLiveQuery(async () => {
+      const all = await db.orders.toArray();
+      return all.filter((o) => !o.lab?.trim()).length;
+    }) ?? 0;
+
+  async function go() {
+    setState('running');
+    setError('');
+    setResult(null);
+
+    const allOrders = await db.orders.toArray();
+    const allPatients = await db.patients.toArray();
+    const patientById = new Map(allPatients.map((p) => [p.id, p]));
+
+    const candidates = allOrders.filter((o) => !o.lab?.trim());
+    if (candidates.length === 0) {
+      setError('沒有缺技工所的 order');
+      setState('error');
+      return;
+    }
+
+    const matched: { chartNo: string; name: string; lab: string; date: string }[] = [];
+    const ambiguous: { chartNo: string; name: string; labs: string[]; date: string }[] = [];
+    const notFound: { chartNo: string; name: string; date: string }[] = [];
+
+    const nowIso = new Date().toISOString();
+    const labNames = labs.map((l) => l.name).filter((n): n is string => !!n?.trim());
+
+    for (const o of candidates) {
+      const p = patientById.get(o.patientId);
+      if (!p) {
+        notFound.push({ chartNo: o.patientChartNo, name: o.patientName, date: o.date });
+        continue;
+      }
+      // 從 patient sourceFolder + allSourceFolders + order.notes 找技工所名
+      const haystack = [
+        p.sourceFolder ?? '',
+        ...(p.allSourceFolders ?? []),
+        o.notes ?? '',
+      ].join(' ');
+
+      const foundLabs = [...new Set(labNames.filter((name) => haystack.includes(name)))];
+
+      if (foundLabs.length === 1) {
+        await db.orders.update(o.id, { lab: foundLabs[0], updatedAt: nowIso });
+        matched.push({
+          chartNo: p.chartNo,
+          name: p.name,
+          lab: foundLabs[0],
+          date: o.date,
+        });
+      } else if (foundLabs.length > 1) {
+        ambiguous.push({
+          chartNo: p.chartNo,
+          name: p.name,
+          labs: foundLabs,
+          date: o.date,
+        });
+      } else {
+        notFound.push({ chartNo: p.chartNo, name: p.name, date: o.date });
+      }
+    }
+
+    setResult({
+      candidatesCount: candidates.length,
+      matched,
+      ambiguous,
+      notFound,
+    });
+    setState('done');
+  }
+
+  return (
+    <section className="rounded-xl border border-zinc-800 bg-zinc-900/30">
+      <header className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-medium text-zinc-200">補技工所（從資料夾名）</h2>
+          <span className="text-xs text-zinc-500">候選 {candidateCount} 筆 order</span>
+        </div>
+        <button
+          onClick={go}
+          disabled={state === 'running' || candidateCount === 0}
+          className="px-3 py-1.5 rounded-md text-xs border border-zinc-700 text-zinc-200 hover:bg-zinc-800 transition disabled:opacity-50"
+        >
+          {state === 'running' ? '⏳ 處理中…' : '🔧 立即補上'}
+        </button>
+      </header>
+      <div className="p-5 space-y-2 text-sm">
+        <p className="text-xs text-zinc-500">
+          掃缺技工所的 order、查該 patient 的 sourceFolder / allSourceFolders / order.notes 是否含技工所名
+          (<span className="text-zinc-400">{labs.map((l) => l.name).join(' / ') || '無'}</span>)。
+          <strong className="text-zinc-300 block mt-1">唯一 1 個 match 才補</strong>、
+          多個 / 沒 match 不動。技工所列表可在「技工所管理」section 修改。
+        </p>
+        {error && (
+          <div className="px-3 py-2 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+            ⚠️ {error}
+          </div>
+        )}
+        {result && (
+          <div className="space-y-2 text-xs">
+            <div className="px-3 py-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
+              ✓ 補上 {result.matched.length} / {result.candidatesCount} 筆 order
+              {result.ambiguous.length > 0 && ` · 多個技工所 ${result.ambiguous.length}`}
+              {result.notFound.length > 0 && ` · 找不到 ${result.notFound.length}`}
+            </div>
+            {result.matched.length > 0 && (
+              <details>
+                <summary className="cursor-pointer text-zinc-500 hover:text-zinc-300">
+                  ▸ 補上清單 ({result.matched.length})
+                </summary>
+                <div className="mt-2 space-y-1 pl-3">
+                  {result.matched.slice(0, 50).map((m, i) => (
+                    <div key={`${m.chartNo}-${m.date}-${i}`} className="text-zinc-400">
+                      <span className="font-mono text-sky-300">{m.chartNo}</span>{' '}
+                      <span className="text-zinc-300">{m.name}</span>
+                      <span className="text-zinc-600 mx-1">·</span>
+                      <span className="text-zinc-500">{m.date}</span>
+                      <span className="text-zinc-600 mx-1">→</span>
+                      <span className="text-emerald-400/80">{m.lab}</span>
+                    </div>
+                  ))}
+                  {result.matched.length > 50 && (
+                    <div className="text-zinc-600">... 還有 {result.matched.length - 50} 個</div>
+                  )}
+                </div>
+              </details>
+            )}
+            {result.ambiguous.length > 0 && (
+              <details>
+                <summary className="cursor-pointer text-amber-400 hover:text-amber-300">
+                  ⚠ 多個技工所（{result.ambiguous.length}）— sourceFolder 同時含多個技工所名、不自動補
+                </summary>
+                <div className="mt-2 space-y-1 pl-3">
+                  {result.ambiguous.map((a, i) => (
+                    <div key={`${a.chartNo}-${a.date}-${i}`} className="text-zinc-400">
+                      <span className="font-mono text-sky-300">{a.chartNo}</span>{' '}
+                      <strong className="text-zinc-200">{a.name}</strong>
+                      <span className="text-zinc-500 ml-1">({a.date})</span>:
+                      <span className="text-amber-300 ml-1">{a.labs.join(' / ')}</span>
+                    </div>
+                  ))}
                 </div>
               </details>
             )}

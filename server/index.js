@@ -34,6 +34,9 @@ import { fileURLToPath } from 'node:url';
 import { openDb, getDb } from './db/db.js';
 import { authStub } from './middleware/auth.js';
 import patientsRouter from './routes/patients.js';
+import ordersRouter from './routes/orders.js';
+import settingsRouter from './routes/settings.js';
+import { sse } from './events/sse.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -138,6 +141,15 @@ function requireDb(req, res, next) {
 
 // ─── 新 API routes ────────────────────────────────────────
 app.use('/api/patients', requireDb, patientsRouter);
+app.use('/api/orders', requireDb, ordersRouter);
+app.use('/api/settings', requireDb, settingsRouter);
+
+// ─── SSE 即時推播 endpoint ────────────────────────────────
+// client GET /events → 持久連線、接收所有 record-level 變更
+app.get('/events', (req, res) => sse.subscribe(req, res));
+
+// 啟動 30s heartbeat（防中間 proxy 砍 idle 連線）
+sse.startHeartbeat();
 
 // ─── /api/health ──────────────────────────────────────
 app.get('/api/health', (_req, res) => {

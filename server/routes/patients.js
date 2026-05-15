@@ -19,6 +19,7 @@ import { getDb } from '../db/db.js';
 import { patientRowToObj, patientObjToRow } from '../lib/json-fields.js';
 import { checkVersion } from '../middleware/optimistic-lock.js';
 import { audit } from '../middleware/audit.js';
+import { sse } from '../events/sse.js';
 
 const router = express.Router();
 
@@ -106,6 +107,11 @@ router.post('/', audit('patient'), (req, res) => {
     return res.status(500).json({ error: 'internal_error', message: e.message });
   }
   const created = findById(id);
+  sse.broadcast(
+    'patient.created',
+    { id: created.id, version: created._version, ts: nowIso() },
+    req.clientId,
+  );
   res.status(201).json({ data: created, meta: { version: created._version } });
 });
 
@@ -146,6 +152,11 @@ router.put('/:id', checkVersion('patients'), audit('patient'), (req, res) => {
     .run(toUpdateParams(row, req.user?.id || 'system'));
 
   const updated = findById(id);
+  sse.broadcast(
+    'patient.updated',
+    { id: updated.id, version: updated._version, ts: nowIso() },
+    req.clientId,
+  );
   res.json({ data: updated, meta: { version: updated._version } });
 });
 
@@ -166,6 +177,11 @@ router.patch('/:id', checkVersion('patients'), audit('patient'), (req, res) => {
     .run(toUpdateParams(row, req.user?.id || 'system'));
 
   const updated = findById(id);
+  sse.broadcast(
+    'patient.updated',
+    { id: updated.id, version: updated._version, ts: nowIso() },
+    req.clientId,
+  );
   res.json({ data: updated, meta: { version: updated._version } });
 });
 
@@ -177,6 +193,7 @@ router.delete('/:id', checkVersion('patients'), audit('patient'), (req, res) => 
   if (r.changes === 0) {
     return res.status(404).json({ error: 'not_found', id });
   }
+  sse.broadcast('patient.deleted', { id, ts: nowIso() }, req.clientId);
   res.json({ data: { id }, meta: { deleted: true } });
 });
 
@@ -219,6 +236,11 @@ router.post('/bulk', audit('patient'), (req, res) => {
     db.exec('ROLLBACK');
     return res.status(500).json({ error: 'internal_error', message: e.message });
   }
+  sse.broadcast(
+    'bulk.imported',
+    { entity: 'patient', count: patients.length, ts: nowIso() },
+    req.clientId,
+  );
   res.json({ data: { count: patients.length }, meta: {} });
 });
 

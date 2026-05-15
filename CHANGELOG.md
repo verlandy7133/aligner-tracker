@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.5.6 — 2026-05-15
+
+加一鍵 build Stage B (iPad viewer) Docker image 流程、跟著主程式版本走。
+
+### 新增
+
+- **`scripts/build-stage-b.ps1`**：一鍵 build + export tar 到 NAS sync 資料夾
+  - 讀 `package.json` version 自動 tag image
+  - `docker build -t aligner-viewer:<version>`
+  - `docker save -o <NAS sync 資料夾>\stage-b\aligner-viewer-<version>.tar`
+  - 自動偵測 NAS sync 資料夾（D 機 `D:\診所nas 矯正追蹤\SynologyDrive\stage-b`、樓上筆電 `W:\0矯正追蹤\stage-b` 之一）
+  - 清舊 tar（保留最近 3 個版本）
+  - 印「下一步」instruction（DSM Docker UI load + replace container）
+- **`npm run build-viewer`**：對應 npm script、跑 PowerShell
+- **`server/DEPLOY.md`** 開頭加「⚡ 快速更新」段、指向 `npm run build-viewer`
+
+### 為什麼
+
+之前 Stage B image 是 v0.3.0、主程式跑到 v0.5.5 了沒跟著更新、iPad viewer 看到舊 UI。
+主上要求「後續有版本更新 請一併更新」。從現在開始：每次 ship 新 App 版本、跑 `npm run build-viewer` 就把對應 image 推到 NAS、DSM 載入即可。
+
+### 使用流程
+
+```powershell
+# 主程式 push v0.5.7 之後
+cd D:\dev\矯正追蹤-app
+npm run build-viewer
+# 等 build 5-10 min、tar 自動寫到 NAS sync 資料夾
+# Drive Client 自動 sync 上 NAS
+# 之後 DSM Docker → 影像 → 從檔案新增 tar → 停舊 container → 用新 image 建
+```
+
+iPad Safari 連 `http://192.168.0.220:8080/` 重整即可看到新版。
+
 ## v0.5.5 — 2026-05-15
 
 下單追蹤頁：patient chartNo + name + AUU chip 整段變 clickable、點下去跳 AUU。

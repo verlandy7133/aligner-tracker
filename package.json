@@ -1,7 +1,7 @@
 {
   "name": "aligner-tracker",
   "private": true,
-  "version": "0.5.5",
+  "version": "0.5.6",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "node scripts/start-clinic.mjs",
-    "icons": "node scripts/generate-icons.mjs"
+    "icons": "node scripts/generate-icons.mjs",
+    "build-viewer": "powershell -ExecutionPolicy Bypass -File scripts/build-stage-b.ps1"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.4",

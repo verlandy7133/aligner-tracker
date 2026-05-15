@@ -2,6 +2,19 @@
 
 > 目標：把 `aligner-viewer` server image deploy 到 Synology DS918+ Docker、iPad 內網可訪問
 
+## ⚡ 快速更新（v0.5.6+ 加的一鍵流程）
+
+D 機已部署過、想更新 image 到新版：
+
+```powershell
+npm run build-viewer
+```
+
+自動 build + export tar 到 `D:\診所nas 矯正追蹤\SynologyDrive\stage-b\aligner-viewer-<version>.tar`、
+Drive Client 自動 sync 上 NAS、之後 DSM Docker UI 載入 + 替換 container 即可。
+
+詳細手動流程見下面。
+
 ## 前置條件
 
 - ✅ NAS = Synology DS918+ DSM 6.2.2 + Docker 套件已裝

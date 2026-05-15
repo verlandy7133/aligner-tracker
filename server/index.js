@@ -31,6 +31,9 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { openDb, getDb } from './db/db.js';
+import { authStub } from './middleware/auth.js';
+import patientsRouter from './routes/patients.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -40,7 +43,19 @@ const DATA_PATH = path.resolve(
   process.env.DATA_PATH || path.join(PROJECT_ROOT, 'dev-data', 'stage-b-test-data'),
 );
 const SYNC_FILE = process.env.SYNC_FILE || path.join(DATA_PATH, 'sync.json');
+const DB_PATH = process.env.DB_PATH || path.join(DATA_PATH, 'db.sqlite');
 const DIST_PATH = path.join(PROJECT_ROOT, 'dist');
+
+// ─── DB 初始化 ────────────────────────────────────────────
+// 若 DB 檔不存在會自動建立並 apply schema.sql。第一次部署前要先跑 migration。
+let dbReady = false;
+try {
+  openDb(DB_PATH);
+  dbReady = true;
+} catch (e) {
+  console.error(`[startup] DB 開不起來 (${DB_PATH}):`, e.message);
+  console.error('[startup] 新 API endpoints (/api/patients 等) 會 503，既有 endpoints 仍可用');
+}
 
 // ─── Path validation ──────────────────────────────────
 // 所有 user-supplied path 必須在 DATA_PATH 底下、不能 traversal 出去
@@ -88,8 +103,9 @@ const app = express();
 // CORS — LAN 內 iPad / Windows / Mac 都可能不同 origin（雖然主要直接訪問 server）
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-User-Id, X-Client-Id, Authorization');
+  res.setHeader('Access-Control-Expose-Headers', 'X-Sync-Mtime, X-Sync-Size');
   if (req.method === 'OPTIONS') {
     res.status(204).end();
     return;
@@ -103,6 +119,26 @@ app.use((req, _res, next) => {
   next();
 });
 
+// JSON body parser（給新 API 用、限制 10MB）
+app.use(express.json({ limit: '10mb' }));
+
+// Auth stub（Phase 1 全部視為 system / admin、塞 req.user / req.clientId）
+app.use(authStub);
+
+// 503 guard：DB 沒開起來時、新 API 直接拒絕（既有 read-only endpoints 不受影響）
+function requireDb(req, res, next) {
+  if (!dbReady) {
+    return res.status(503).json({
+      error: 'db_unavailable',
+      message: `SQLite DB 沒開起來。檢查 DB_PATH=${DB_PATH}`,
+    });
+  }
+  next();
+}
+
+// ─── 新 API routes ────────────────────────────────────────
+app.use('/api/patients', requireDb, patientsRouter);
+
 // ─── /api/health ──────────────────────────────────────
 app.get('/api/health', (_req, res) => {
   const syncExists = fs.existsSync(SYNC_FILE);
@@ -115,15 +151,32 @@ app.get('/api/health', (_req, res) => {
       // ignore
     }
   }
+
+  // DB 狀態
+  let dbInfo = { ready: dbReady, path: DB_PATH };
+  if (dbReady) {
+    try {
+      const db = getDb();
+      const patientCount = db.prepare('SELECT COUNT(*) AS c FROM patients').get().c;
+      const orderCount = db.prepare('SELECT COUNT(*) AS c FROM orders').get().c;
+      const userCount = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
+      const migrations = db.prepare('SELECT version, applied_at FROM migrations ORDER BY version').all();
+      dbInfo = { ...dbInfo, patientCount, orderCount, userCount, migrations };
+    } catch (e) {
+      dbInfo.error = e.message;
+    }
+  }
+
   res.json({
     ok: true,
     service: 'aligner-viewer-server',
-    version: '0.3.0',
+    version: '0.6.0-dev',
     dataPath: DATA_PATH,
     syncFile: SYNC_FILE,
     syncExists,
     syncStat,
     distExists: fs.existsSync(DIST_PATH),
+    db: dbInfo,
   });
 });
 
@@ -282,7 +335,8 @@ if (fs.existsSync(DIST_PATH)) {
   app.use(express.static(DIST_PATH));
   // SPA fallback — client-side routing (React Router)
   // Express 5 + path-to-regexp 不再支援 '*' 字串、改用 regex catch-all
-  app.get(/.*/, (_req, res) => {
+  // 但不能吃 /api/* — 那些不存在就 404
+  app.get(/^\/(?!api\/).*/, (_req, res) => {
     res.sendFile(path.join(DIST_PATH, 'index.html'));
   });
 } else {
@@ -298,6 +352,26 @@ if (fs.existsSync(DIST_PATH)) {
     `);
   });
 }
+
+// ─── Global error handler — 任何 throw 都包成 JSON、不要回 HTML ──
+// （Express 5 error middleware：4 個參數）
+app.use((err, _req, res, _next) => {
+  console.error('[error]', err.message, err.stack);
+  if (res.headersSent) return;
+  res.status(500).json({
+    error: 'internal_error',
+    message: err.message,
+  });
+});
+
+// 404 JSON for /api/* paths that didn't match any route
+app.use('/api', (_req, res) => {
+  res.status(404).json({ error: 'not_found', message: 'unknown API endpoint' });
+});
+
+// Unhandled errors — log 但不 crash server
+process.on('uncaughtException', (e) => console.error('[uncaughtException]', e));
+process.on('unhandledRejection', (e) => console.error('[unhandledRejection]', e));
 
 // ─── start ────────────────────────────────────────────
 app.listen(PORT, '0.0.0.0', () => {

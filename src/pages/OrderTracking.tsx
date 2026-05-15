@@ -455,6 +455,14 @@ function GroupView({
               <div className="flex items-center gap-2 text-sm flex-wrap">
                 <span className="text-zinc-500 tabular">{head.patientChartNo}</span>
                 <span className="text-zinc-100 font-medium">{head.patientName}</span>
+                {patient?.auuId && (
+                  <span
+                    className="text-[10px] font-mono tabular border border-sky-500/40 text-sky-300 rounded px-1.5 py-0.5"
+                    title={`奧優編號 A${patient.auuId.replace(/^A/i, '')}`}
+                  >
+                    🌐 A{patient.auuId.replace(/^A/i, '')}
+                  </span>
+                )}
                 {head.doctor && <DoctorBadge name={head.doctor} />}
                 {patient?.track && (
                   <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border whitespace-nowrap ${TRACK_BADGE[patient.track]}`}>
@@ -486,7 +494,7 @@ function GroupView({
                       : `跳奧優列表 (姓名「${head.patientName}」會 copy 到剪貼簿、過去 Ctrl+V)`
                   }
                 >
-                  🌐 奧優{patient?.auuId ? ` A${patient.auuId.replace(/^A/i, '')}` : ''}
+                  🌐 奧優
                 </button>
                 <button
                   type="button"

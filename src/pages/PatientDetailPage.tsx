@@ -96,6 +96,14 @@ export default function PatientDetailPage() {
           <h1 className="text-3xl font-semibold text-zinc-100 mt-1 flex items-center gap-3">
             <span className="text-zinc-500 tabular text-2xl">{patient.chartNo}</span>
             <span>{patient.name}</span>
+            {patient.auuId && (
+              <span
+                className="text-xs font-mono tabular border border-sky-500/40 text-sky-300 rounded px-2 py-0.5 self-center"
+                title={`奧優編號 A${patient.auuId.replace(/^A/i, '')}`}
+              >
+                🌐 A{patient.auuId.replace(/^A/i, '')}
+              </span>
+            )}
           </h1>
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             <Badge className={PRODUCT_LINE_BADGE[patient.productLine]}>
@@ -227,7 +235,7 @@ export default function PatientDetailPage() {
                 : `跳奧優列表 (姓名「${patient.name}」會 copy 到剪貼簿、過去 Ctrl+V)`
             }
           >
-            🌐 奧優{patient.auuId ? ` A${patient.auuId.replace(/^A/i, '')}` : ''}
+            🌐 奧優
           </button>
           {!READ_ONLY && (
             <button

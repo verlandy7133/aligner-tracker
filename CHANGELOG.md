@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.5.4 — 2026-05-15
+
+下單追蹤頁 + 病患詳細頁 patient name 旁直接顯示 AUU 編號 chip、不用滑到 button 看。
+
+### 變動
+
+**`OrderTracking`**：每個 patient row 在 name 旁邊加 chip `🌐 A26681`（sky 邊框、有 auuId 才顯示）。Button label 改回固定「🌐 奧優」(不重複編號)。
+
+**`PatientDetailPage`**：header h1 內、name 後面加 chip `🌐 A26681`。Button label 同樣簡化。
+
+### 為什麼
+
+之前 v0.5.1/5.3 把 auuId 寫進 button label「🌐 奧優 A26681」、視覺集中右側、距離 patient name 遠。
+搬到 name 旁 chip、一眼看到 auuId、button 保持簡潔。
+
+### 順手：今天稍早完成的 AUU import
+
+D 機透過 Claude in Chrome 跟主上一起做 batch import：
+- AUU 後台 scrape 319 患者 (auuId + name + doctor)
+- 用 `window.name` cross-origin navigate 帶資料（HTTPS→HTTP fetch mixed content 擋掉、execCommand copy 也擋、clipboard need user gesture、最後靠 window.name trick）
+- IndexedDB.patient.auuId batch update：**306 unique match 補上**、13 no-match（含 1 測試帳號）
+- 96% 自動完成
+- 之後 OrderTracking 點 button 直跳 AUU detail page、不用走 list page+貼姓名搜
+
+筆電還沒這份 mapping（D 機 task 唯讀沒 push NAS）— 之後筆電可重跑同流程、或改 task 雙向同步等 D 機 push。
+
 ## v0.5.3 — 2026-05-15
 
 下單追蹤頁加「🌐 奧優」button + 沒 auuId 時自動 copy name 到剪貼簿。

@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.5.5 — 2026-05-15
+
+下單追蹤頁：patient chartNo + name + AUU chip 整段變 clickable、點下去跳 AUU。
+
+### 變動（`OrderTracking`）
+
+- chartNo / name / AUU chip 包成 `<button>`、`onClick` 跑 `openAuuForPatient`
+- Hover 整段變藍底 + 文字變 sky 色（視覺提示可點）
+- 右側「🌐 奧優」button 保留（多一個 entry point、不衝突）
+
+### 之前
+
+點 chartNo / name 沒反應（純文字）、要走右側「🌐 奧優」button、視線跨度大。
+
+### 現在
+
+整個 patient header line 內任何文字（除醫師 / 訂單流派 chip）點下去 → 跳 AUU detail（或 list + clipboard）。
+
 ## v0.5.4 — 2026-05-15
 
 下單追蹤頁 + 病患詳細頁 patient name 旁直接顯示 AUU 編號 chip、不用滑到 button 看。

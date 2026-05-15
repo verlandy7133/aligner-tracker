@@ -453,16 +453,34 @@ function GroupView({
           <div key={key} className="rounded-xl border border-zinc-800 bg-zinc-900/30 overflow-hidden">
             <div className="px-4 py-2 bg-zinc-900/60 border-b border-zinc-800 flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm flex-wrap">
-                <span className="text-zinc-500 tabular">{head.patientChartNo}</span>
-                <span className="text-zinc-100 font-medium">{head.patientName}</span>
-                {patient?.auuId && (
-                  <span
-                    className="text-[10px] font-mono tabular border border-sky-500/40 text-sky-300 rounded px-1.5 py-0.5"
-                    title={`奧優編號 A${patient.auuId.replace(/^A/i, '')}`}
-                  >
-                    🌐 A{patient.auuId.replace(/^A/i, '')}
-                  </span>
-                )}
+                {/* v0.5.5: chartNo + name + AUU chip 整段 clickable、點下去跳 AUU
+                    Hover 變色提示可點、右側其他 button 不受影響 (各自獨立元素) */}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const r = await openAuuForPatient({
+                      auuId: patient?.auuId,
+                      name: head.patientName,
+                    });
+                    if (r === 'list-with-clipboard') {
+                      alert(`已複製「${head.patientName}」到剪貼簿。\n過去後在搜尋框按 Ctrl+V 即可搜尋。\n（之後在病患詳細頁編輯「奧優編號」、下次就直跳 detail）`);
+                    }
+                  }}
+                  className="flex items-center gap-2 px-1 -mx-1 py-0.5 rounded hover:bg-sky-500/10 transition group cursor-pointer"
+                  title={
+                    patient?.auuId
+                      ? `→ 奧優病患 A${patient.auuId.replace(/^A/i, '')}`
+                      : `→ 奧優列表（copy 姓名「${head.patientName}」到剪貼簿）`
+                  }
+                >
+                  <span className="text-zinc-500 tabular group-hover:text-sky-400">{head.patientChartNo}</span>
+                  <span className="text-zinc-100 font-medium group-hover:text-sky-300">{head.patientName}</span>
+                  {patient?.auuId && (
+                    <span className="text-[10px] font-mono tabular border border-sky-500/40 text-sky-300 rounded px-1.5 py-0.5 group-hover:border-sky-400 group-hover:bg-sky-500/10">
+                      🌐 A{patient.auuId.replace(/^A/i, '')}
+                    </span>
+                  )}
+                </button>
                 {head.doctor && <DoctorBadge name={head.doctor} />}
                 {patient?.track && (
                   <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border whitespace-nowrap ${TRACK_BADGE[patient.track]}`}>

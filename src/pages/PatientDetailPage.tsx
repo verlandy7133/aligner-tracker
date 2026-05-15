@@ -22,7 +22,7 @@ import PatientFormModal from '../components/PatientFormModal';
 import PatientNotesSection from '../components/PatientNotesSection';
 import { callHelper, findAndOpenPdf, createFolder, describeHelperFailure } from '../lib/helper-client';
 import { READ_ONLY } from '../lib/read-only';
-import { openAuu } from '../lib/auu';
+import { openAuuForPatient } from '../lib/auu';
 import { getPaths } from '../lib/helper-client';
 
 // 把西元 birthday (YYYY-MM-DD) 轉成民國格式 (民國YYMMDD 或 民國YYYMMDD)
@@ -212,14 +212,19 @@ export default function PatientDetailPage() {
               📋 開指示單
             </button>
           )}
-          {/* v0.5.1: 跳奧優後台 — 有 auuId 直跳 detail / 沒填 fallback 跳 list */}
+          {/* v0.5.1/v0.5.3: 跳奧優後台 — 有 auuId 直跳 detail / 沒填則 copy name 到剪貼簿 + 跳 list */}
           <button
-            onClick={() => openAuu(patient.auuId)}
+            onClick={async () => {
+              const r = await openAuuForPatient({ auuId: patient.auuId, name: patient.name });
+              if (r === 'list-with-clipboard') {
+                alert(`已複製「${patient.name}」到剪貼簿。\n過去後在搜尋框按 Ctrl+V 即可搜尋。\n（在 ✎ 編輯內填「奧優編號」、下次直跳 detail）`);
+              }
+            }}
             className="px-3 py-2 rounded-md text-sm border border-sky-500/40 text-sky-300 hover:bg-sky-500/10 transition"
             title={
               patient.auuId
                 ? `奧優後台病患 A${patient.auuId.replace(/^A/i, '')}`
-                : '沒填奧優編號 → 跳列表頁手動搜（在 ✎ 編輯內填編號即可下次直跳）'
+                : `跳奧優列表 (姓名「${patient.name}」會 copy 到剪貼簿、過去 Ctrl+V)`
             }
           >
             🌐 奧優{patient.auuId ? ` A${patient.auuId.replace(/^A/i, '')}` : ''}

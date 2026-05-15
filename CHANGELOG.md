@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.5.3 — 2026-05-15
+
+下單追蹤頁加「🌐 奧優」button + 沒 auuId 時自動 copy name 到剪貼簿。
+
+### 變動
+
+**`src/lib/auu.ts` 加 `openAuuForPatient(patient)`**：
+
+- 有 `patient.auuId` → 直跳 `/client/patient/detail/<id>`、return `'detail'`
+- 沒 auuId →
+  - **copy `patient.name` 到剪貼簿**（`navigator.clipboard.writeText`）
+  - 跳 `/client/patient/list`
+  - return `'list-with-clipboard'`（給 UI 決定要不要 toast 提示）
+- clipboard 寫入失敗（權限被擋 / 舊瀏覽器）→ return `'list-only'`、還是跳 list
+
+**`OrderTracking` 加 button**（在 patient row 「+ 新增」 button 旁邊）：
+- 有 auuId → label「🌐 奧優 A26681」
+- 沒 auuId → label「🌐 奧優」、點下去 copy name + 跳 list + alert 提示「Ctrl+V 即可搜」
+
+**`PatientDetailPage` 既有 button 升級** 用 `openAuuForPatient`、行為一致。
+
+### 為什麼不用 URL query auto-search
+
+- AUU 後台的搜尋是 client-side filter、URL 不帶 query
+- 跨 origin 不能用 JS 自動填別站表單（Same-Origin Policy）
+- 剪貼簿是 user-friendly 折衷 — 一鍵 Ctrl+V 等同 search
+
+### 未來可做
+
+- 從奧優 export patient list（含 A 編號 + 姓名）、batch import 對映 auuId 進 IndexedDB
+- 之後所有 patient 都有 auuId、直接跳 detail、不需要剪貼簿步驟
+
 ## v0.5.2 — 2026-05-15
 
 修 `deriveConventionalSourceFolder` 寫死 `D:\矯正\` prefix 的 bug。

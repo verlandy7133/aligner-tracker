@@ -35,3 +35,42 @@ export function buildAuuUrl(auuId?: string | null): string {
 export function openAuu(auuId?: string | null): void {
   window.open(buildAuuUrl(auuId), '_blank', 'noopener,noreferrer');
 }
+
+/**
+ * v0.5.3 加：給 patient 用、智慧跳 AUU：
+ *   - 有 auuId → 直跳 detail
+ *   - 沒 auuId → copy name 到剪貼簿 + 跳 list page、user 過去 Ctrl+V 即可搜
+ *     (跨 origin 不能自動填別站表單、Same-Origin Policy 擋；剪貼簿是 user-friendly fallback)
+ *
+ * 回傳值給 UI 決定要不要 toast 提示。
+ */
+export type AuuOpenResult = 'detail' | 'list-with-clipboard' | 'list-only';
+
+export async function openAuuForPatient(patient: {
+  auuId?: string | null;
+  name?: string | null;
+}): Promise<AuuOpenResult> {
+  const cleanedId = patient.auuId?.replace(/^A/i, '').trim();
+  if (cleanedId) {
+    window.open(
+      `${AUU_BASE}/client/patient/detail/${encodeURIComponent(cleanedId)}`,
+      '_blank',
+      'noopener,noreferrer',
+    );
+    return 'detail';
+  }
+
+  // 沒 auuId → 先 copy name 再跳 list
+  let copied = false;
+  const name = patient.name?.trim();
+  if (name && navigator.clipboard) {
+    try {
+      await navigator.clipboard.writeText(name);
+      copied = true;
+    } catch {
+      // clipboard 權限被擋 / 舊 browser — 略過、還是跳 list
+    }
+  }
+  window.open(`${AUU_BASE}/client/patient/list`, '_blank', 'noopener,noreferrer');
+  return copied ? 'list-with-clipboard' : 'list-only';
+}

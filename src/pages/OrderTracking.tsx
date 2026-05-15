@@ -14,6 +14,7 @@ import { PROGRESS_BADGE, TRACK_LABEL, TRACK_BADGE, REFINEMENT_LABEL, REFINEMENT_
 import { labBadgeStyle, useLabs } from '../lib/labs';
 import { doctorBadgeStyle, useDoctors } from '../lib/doctors';
 import { READ_ONLY } from '../lib/read-only';
+import { openAuuForPatient } from '../lib/auu';
 import {
   deriveOrderAlerts,
   ORDER_ALERT_BADGE,
@@ -467,6 +468,26 @@ function GroupView({
                 )}
               </div>
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const r = await openAuuForPatient({
+                      auuId: patient?.auuId,
+                      name: head.patientName,
+                    });
+                    if (r === 'list-with-clipboard') {
+                      alert(`已複製「${head.patientName}」到剪貼簿。\n過去後在搜尋框按 Ctrl+V 即可搜尋。\n（之後在病患詳細頁編輯「奧優編號」、下次就直跳 detail）`);
+                    }
+                  }}
+                  className="px-2 py-1 rounded-md text-xs border border-sky-500/40 text-sky-300 hover:bg-sky-500/10 transition"
+                  title={
+                    patient?.auuId
+                      ? `跳奧優病患 A${patient.auuId.replace(/^A/i, '')}`
+                      : `跳奧優列表 (姓名「${head.patientName}」會 copy 到剪貼簿、過去 Ctrl+V)`
+                  }
+                >
+                  🌐 奧優{patient?.auuId ? ` A${patient.auuId.replace(/^A/i, '')}` : ''}
+                </button>
                 <button
                   type="button"
                   onClick={() => onAddForPatient(head.patientId)}

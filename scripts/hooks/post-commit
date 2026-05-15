@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Auto-trigger Stage B Docker image build when package.json version changes.
+#
+# 來源檔：scripts/hooks/post-commit (in repo、tracked)
+# 安裝位置：.git/hooks/post-commit (git 不 track、要 install)
+# 安裝方式：npm run install-hooks (一次性)
+
+set -e
+
+# Only trigger if package.json was modified
+if ! git diff HEAD^ HEAD --name-only 2>/dev/null | grep -q '^package.json$'; then
+  exit 0
+fi
+
+# Only trigger if "version" line specifically changed
+if ! git diff HEAD^ HEAD -- package.json 2>/dev/null | grep -qE '^[+-]\s*"version"'; then
+  exit 0
+fi
+
+# Get new version from current HEAD
+NEW_VER=$(node -p "require('./package.json').version" 2>/dev/null || echo "")
+if [ -z "$NEW_VER" ]; then
+  exit 0
+fi
+
+# Idempotent: skip if image already built for this version
+if docker images "aligner-viewer:$NEW_VER" --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -q "aligner-viewer:$NEW_VER"; then
+  echo "[post-commit] aligner-viewer:$NEW_VER image 已存在、skip auto-build"
+  exit 0
+fi
+
+echo ""
+echo "📦 [post-commit] package.json version → $NEW_VER"
+echo "    背景跑 npm run build-viewer (log: $(git rev-parse --show-toplevel)/.stage-b-build.log)"
+
+# nohup + & 在 background、不 block git commit
+(cd "$(git rev-parse --show-toplevel)" && nohup npm run build-viewer > .stage-b-build.log 2>&1 &)
+echo "    pid: $!  完成後 tar 自動寫到 NAS sync 資料夾"
+echo ""

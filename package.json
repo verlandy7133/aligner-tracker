@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "start": "node scripts/start-clinic.mjs",
     "icons": "node scripts/generate-icons.mjs",
-    "build-viewer": "node scripts/build-stage-b.mjs"
+    "build-viewer": "node scripts/build-stage-b.mjs",
+    "install-hooks": "node scripts/install-hooks.mjs"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.4",

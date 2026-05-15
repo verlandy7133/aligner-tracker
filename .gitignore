@@ -27,3 +27,6 @@ dist-ssr
 dev-data/
 **/patients-import*.json
 **/patients-backup*.json
+
+# Stage B build log (post-commit hook 寫入)
+.stage-b-build.log

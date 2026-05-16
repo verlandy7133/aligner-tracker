@@ -69,6 +69,11 @@ import {
   type MigrationCandidate,
 } from '../lib/path-migration';
 
+// v0.6.x：dual / api 模式下、NAS server 是單一資料源 + SSE 即時同步
+// 路徑遷移（v0.5.x IndexedDB 內絕對路徑改寫）與跨機同步（手動推拉 sync.json）皆過時、應隱藏
+const DATA_MODE = (import.meta.env.VITE_DATA_MODE as string) || 'dexie';
+const SHOW_LEGACY_SYNC = DATA_MODE === 'dexie';
+
 export default function SettingsPage() {
   return (
     <div className="space-y-6">
@@ -90,8 +95,9 @@ export default function SettingsPage() {
         <>
           <UpdateSection />
           <PathsSection />
-          <PathMigrationSection />
-          <SyncSection />
+          {/* v0.6.x: 純 dexie 單機才需要、dual / api 模式有 NAS 即時同步、不需要 */}
+          {SHOW_LEGACY_SYNC && <PathMigrationSection />}
+          {SHOW_LEGACY_SYNC && <SyncSection />}
           <LabSection />
           <DoctorSection />
           <AlertSection />
@@ -3345,7 +3351,9 @@ function SourceFolderHealthSection() {
           透過 helper 檢查每位病患的 <code className="text-zinc-400">sourceFolder</code> 跟{' '}
           <code className="text-zinc-400">consentPdfPath</code> 在實際檔案系統上是否存在。
           找出「指向不存在」的死路徑 — 可能原因：資料夾被改名 / 移到別處 / 已刪除 / NAS 沒連。
-          <strong className="text-zinc-400 block mt-1">先跑「路徑遷移」把 prefix 統一、再來健檢比較準。</strong>
+          {SHOW_LEGACY_SYNC && (
+            <strong className="text-zinc-400 block mt-1">先跑「路徑遷移」把 prefix 統一、再來健檢比較準。</strong>
+          )}
         </p>
 
         {stats && (

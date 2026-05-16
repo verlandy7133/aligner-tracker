@@ -6,6 +6,7 @@ import OrderTracking from './pages/OrderTracking';
 import OrderReportPage from './pages/OrderReportPage';
 import SettingsPage from './pages/SettingsPage';
 import ThemeSelector from './components/ThemeSelector';
+import { OnlineStatusBadge, OfflineBanner } from './components/OnlineStatus';
 import { seedIfEmpty } from './seed';
 import { useTheme } from './themes';
 import { initScale } from './lib/ui-scale';
@@ -133,10 +134,15 @@ export default function App() {
                 )}
               </span>
             </NavItem>
-            <div className="ml-2"><ThemeSelector /></div>
+            <div className="ml-2 flex items-center gap-3">
+              <OnlineStatusBadge />
+              <ThemeSelector />
+            </div>
           </div>
         </div>
       </nav>
+
+      <OfflineBanner />
 
       <main className="max-w-[1800px] mx-auto px-6 py-8">
         <Routes>

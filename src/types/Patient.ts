@@ -136,6 +136,12 @@ export type Patient = {
 
   createdAt: string;
   updatedAt: string;
+
+  // v0.6.0: server 端樂觀鎖版本號（從 NAS API 拉回時 server 塞、本機端讀但不改）
+  // 寫操作（PUT/PATCH/DELETE）必須回傳這個值給 server 驗證
+  _version?: number;
+  _createdBy?: string;
+  _updatedBy?: string;
 };
 
 export const DEFAULT_CYCLE_DAYS = 14;
@@ -178,6 +184,11 @@ export type Order = {
 
   createdAt: string;
   updatedAt: string;
+
+  // v0.6.0 樂觀鎖版本（同 Patient._version）
+  _version?: number;
+  _createdBy?: string;
+  _updatedBy?: string;
 };
 
 export const BATCH_TYPE_OPTIONS = ['新', '舊', '新設計', '新設計1', '舊設計', '其他'];

@@ -54,12 +54,12 @@ export class DexieDataLayer implements DataLayer {
     return result;
   }
 
-  async createPatient(p: Omit<Patient, 'id' | 'createdAt' | 'updatedAt'>): Promise<Patient> {
+  async createPatient(p: Partial<Patient> & Pick<Patient, 'chartNo' | 'name' | 'productLine' | 'status'>): Promise<Patient> {
     const now = this.nowIso();
     const full: Patient = {
       ...(p as Patient),
-      id: crypto.randomUUID(),
-      createdAt: now,
+      id: p.id || crypto.randomUUID(),
+      createdAt: p.createdAt || now,
       updatedAt: now,
     };
     await db.patients.put(full);
@@ -112,12 +112,12 @@ export class DexieDataLayer implements DataLayer {
     return result;
   }
 
-  async createOrder(o: Omit<Order, 'id' | 'createdAt' | 'updatedAt'>): Promise<Order> {
+  async createOrder(o: Partial<Order> & Pick<Order, 'patientId' | 'date' | 'progress'>): Promise<Order> {
     const now = this.nowIso();
     const full: Order = {
       ...(o as Order),
-      id: crypto.randomUUID(),
-      createdAt: now,
+      id: o.id || crypto.randomUUID(),
+      createdAt: o.createdAt || now,
       updatedAt: now,
     };
     await db.orders.put(full);
@@ -131,6 +131,13 @@ export class DexieDataLayer implements DataLayer {
     const updated = { ...before, ...patch, id, updatedAt: this.nowIso() };
     await db.orders.put(updated);
     this.emit({ entity: 'order', action: 'updated', id, patientId: updated.patientId });
+    return updated;
+  }
+
+  async putOrder(o: Order, _version: number): Promise<Order> {
+    const updated = { ...o, updatedAt: this.nowIso() };
+    await db.orders.put(updated);
+    this.emit({ entity: 'order', action: 'updated', id: o.id, patientId: o.patientId });
     return updated;
   }
 

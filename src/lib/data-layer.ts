@@ -41,7 +41,8 @@ export interface DataLayer {
   // ─── Patients ──
   getPatient(id: string): Promise<Patient | null>;
   listPatients(filter?: PatientFilter): Promise<Patient[]>;
-  createPatient(p: Omit<Patient, 'id' | 'createdAt' | 'updatedAt'>): Promise<Patient>;
+  // createPatient 接 Partial<Patient>：caller 可帶 id（要求用該 id）也可不帶（server 生）
+  createPatient(p: Partial<Patient> & Pick<Patient, 'chartNo' | 'name' | 'productLine' | 'status'>): Promise<Patient>;
   updatePatient(id: string, patch: Partial<Patient>, version: number): Promise<Patient>;
   putPatient(p: Patient, version: number): Promise<Patient>;
   deletePatient(id: string, version: number): Promise<void>;
@@ -50,8 +51,9 @@ export interface DataLayer {
   // ─── Orders ──
   getOrder(id: string): Promise<Order | null>;
   listOrders(filter?: OrderFilter): Promise<Order[]>;
-  createOrder(o: Omit<Order, 'id' | 'createdAt' | 'updatedAt'>): Promise<Order>;
+  createOrder(o: Partial<Order> & Pick<Order, 'patientId' | 'date' | 'progress'>): Promise<Order>;
   updateOrder(id: string, patch: Partial<Order>, version: number): Promise<Order>;
+  putOrder(o: Order, version: number): Promise<Order>;
   deleteOrder(id: string, version: number): Promise<void>;
   bulkPutOrders(orders: Order[]): Promise<void>;
 

@@ -10,7 +10,7 @@
 // 顯示：透過 helper /serve-image 串 image binary
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { db } from '../db';
+import { getDataLayer } from '../lib/data-layer';
 import type { Patient, PhotoMeta, PhotoSlot, PhotoSlotGroup } from '../types/Patient';
 import { PHOTO_SLOTS, PHOTO_GROUP_LABEL } from '../types/Patient';
 import {
@@ -123,10 +123,11 @@ function PhotoAIPickerModal({
         ? { ...existing, filename }
         : { filename };
     }
-    await db.patients.update(patient.id, {
-      photos: nextPhotos,
-      updatedAt: new Date().toISOString(),
-    });
+    await getDataLayer().updatePatient(
+      patient.id,
+      { photos: nextPhotos, updatedAt: new Date().toISOString() },
+      patient._version ?? 1,
+    );
     setPhase('done');
     setTimeout(onClose, 1200);
   }
@@ -703,10 +704,11 @@ function PhotoSlotCell({
     if (!confirm(`移除 ${slotLabel} 的照片連結？\n（檔案不會刪除、只是 App 內取消綁定）`)) return;
     const nextPhotos = { ...(patient.photos || {}) };
     delete nextPhotos[slotKey];
-    await db.patients.update(patient.id, {
-      photos: nextPhotos,
-      updatedAt: new Date().toISOString(),
-    });
+    await getDataLayer().updatePatient(
+      patient.id,
+      { photos: nextPhotos, updatedAt: new Date().toISOString() },
+      patient._version ?? 1,
+    );
   }
 
   // ─── HTML5 drag and drop：拖一個 slot 的照片到另一個、互換 ──
@@ -742,10 +744,11 @@ function PhotoSlotCell({
     else delete next[slotKey];
     if (targetMeta) next[sourceSlot] = targetMeta;
     else delete next[sourceSlot];
-    await db.patients.update(patient.id, {
-      photos: next,
-      updatedAt: new Date().toISOString(),
-    });
+    await getDataLayer().updatePatient(
+      patient.id,
+      { photos: next, updatedAt: new Date().toISOString() },
+      patient._version ?? 1,
+    );
   }
 
   const dragOverRing = isDragOver
@@ -899,10 +902,14 @@ function PhotoEditorModal({
   async function save() {
     // v0.4.8: 無變動時 skip db write、直接 close（避免「儲存」按鈕假死、user 不知道為什麼點不下去）
     if (dirty) {
-      await db.patients.update(patient.id, {
-        photos: { ...(patient.photos || {}), [slot]: meta },
-        updatedAt: new Date().toISOString(),
-      });
+      await getDataLayer().updatePatient(
+        patient.id,
+        {
+          photos: { ...(patient.photos || {}), [slot]: meta },
+          updatedAt: new Date().toISOString(),
+        },
+        patient._version ?? 1,
+      );
     }
     onClose();
   }
@@ -1223,10 +1230,14 @@ function PhotoPickerModal({
   }, [patient.sourceFolder]);
 
   async function pick(filename: string) {
-    await db.patients.update(patient.id, {
-      photos: { ...(patient.photos || {}), [slot]: { filename } },
-      updatedAt: new Date().toISOString(),
-    });
+    await getDataLayer().updatePatient(
+      patient.id,
+      {
+        photos: { ...(patient.photos || {}), [slot]: { filename } },
+        updatedAt: new Date().toISOString(),
+      },
+      patient._version ?? 1,
+    );
     onClose();
   }
 
@@ -1358,10 +1369,11 @@ function MarkdownNoteEditor({ patient }: { patient: Patient }) {
     // debounced auto-save 500ms
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(async () => {
-      await db.patients.update(patient.id, {
-        markdownNote: next,
-        updatedAt: new Date().toISOString(),
-      });
+      await getDataLayer().updatePatient(
+        patient.id,
+        { markdownNote: next, updatedAt: new Date().toISOString() },
+        patient._version ?? 1,
+      );
       setSavedTick(true);
       setTimeout(() => setSavedTick(false), 1200);
     }, 500);

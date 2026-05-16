@@ -119,7 +119,7 @@ export class DualDataLayer implements DataLayer {
     return this.dexie.listPatients(filter);
   }
 
-  async createPatient(p: Omit<Patient, 'id' | 'createdAt' | 'updatedAt'>): Promise<Patient> {
+  async createPatient(p: Partial<Patient> & Pick<Patient, 'chartNo' | 'name' | 'productLine' | 'status'>): Promise<Patient> {
     if (!this.remote.isOnline()) throw new OfflineError();
     // 先讓 server 生 id + version、再回寫 Dexie
     const created = await this.remote.createPatient(p);
@@ -189,7 +189,7 @@ export class DualDataLayer implements DataLayer {
     return this.dexie.listOrders(filter);
   }
 
-  async createOrder(o: Omit<Order, 'id' | 'createdAt' | 'updatedAt'>): Promise<Order> {
+  async createOrder(o: Partial<Order> & Pick<Order, 'patientId' | 'date' | 'progress'>): Promise<Order> {
     if (!this.remote.isOnline()) throw new OfflineError();
     const created = await this.remote.createOrder(o);
     await db.orders.put(created);
@@ -209,6 +209,24 @@ export class DualDataLayer implements DataLayer {
       },
       async () => {
         if (before) await db.orders.put(before);
+      },
+    );
+  }
+
+  async putOrder(o: Order, version: number): Promise<Order> {
+    const before = await db.orders.get(o.id);
+    return this.dualWrite(
+      async () => {
+        await db.orders.put({ ...o, updatedAt: new Date().toISOString() });
+      },
+      async () => {
+        const updated = await this.remote.putOrder(o, version);
+        await db.orders.put(updated);
+        return updated;
+      },
+      async () => {
+        if (before) await db.orders.put(before);
+        else await db.orders.delete(o.id);
       },
     );
   }

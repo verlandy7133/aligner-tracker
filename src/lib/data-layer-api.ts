@@ -165,7 +165,7 @@ export class ApiDataLayer implements DataLayer {
     return list;
   }
 
-  async createPatient(p: Omit<Patient, 'id' | 'createdAt' | 'updatedAt'>): Promise<Patient> {
+  async createPatient(p: Partial<Patient> & Pick<Patient, 'chartNo' | 'name' | 'productLine' | 'status'>): Promise<Patient> {
     const r = await api<ServerResponse<Patient>>('/api/patients', { method: 'POST', body: p });
     return unwrapPatient(r.data);
   }
@@ -214,7 +214,7 @@ export class ApiDataLayer implements DataLayer {
     return r.data.map(unwrapOrder);
   }
 
-  async createOrder(o: Omit<Order, 'id' | 'createdAt' | 'updatedAt'>): Promise<Order> {
+  async createOrder(o: Partial<Order> & Pick<Order, 'patientId' | 'date' | 'progress'>): Promise<Order> {
     const r = await api<ServerResponse<Order>>('/api/orders', { method: 'POST', body: o });
     return unwrapOrder(r.data);
   }
@@ -223,6 +223,14 @@ export class ApiDataLayer implements DataLayer {
     const r = await api<ServerResponse<Order>>(`/api/orders/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       body: { ...patch, version },
+    });
+    return unwrapOrder(r.data);
+  }
+
+  async putOrder(o: Order, version: number): Promise<Order> {
+    const r = await api<ServerResponse<Order>>(`/api/orders/${encodeURIComponent(o.id)}`, {
+      method: 'PUT',
+      body: { ...o, version },
     });
     return unwrapOrder(r.data);
   }

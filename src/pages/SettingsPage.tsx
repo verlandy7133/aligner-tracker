@@ -4,6 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import { getDataLayer } from '../lib/data-layer';
 import UserManagementSection from '../components/UserManagementSection';
+import AuditLogSection from '../components/AuditLogSection';
 import type { Patient } from '../types/Patient';
 import { rescanAndImport, type RescanResult } from '../lib/folder-rescan';
 import { reapplyExcelUpdates, type ReapplyResult } from '../lib/reapply-excel';
@@ -82,6 +83,8 @@ export default function SettingsPage() {
       <PhotoStyleSection />
       {/* v0.6.1: 帳號管理（admin only、非 admin 自動隱藏內容） */}
       {!READ_ONLY && <UserManagementSection />}
+      {/* v0.6.1: audit log viewer（admin only） */}
+      {!READ_ONLY && <AuditLogSection />}
       {/* 以下 mutation section 在 readOnly mode 全隱藏（iPad 端只留視覺偏好）*/}
       {!READ_ONLY && (
         <>

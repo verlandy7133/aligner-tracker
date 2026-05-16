@@ -38,6 +38,7 @@ import ordersRouter from './routes/orders.js';
 import settingsRouter from './routes/settings.js';
 import authRouter from './routes/auth.js';
 import usersRouter from './routes/users.js';
+import auditLogRouter from './routes/audit-log.js';
 import { sse } from './events/sse.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -145,6 +146,7 @@ function requireDb(req, res, next) {
 // bootstrap-admin / login 不需要 token；me / logout 需要
 app.use('/api/auth', requireDb, authRouter);
 app.use('/api/users', requireDb, usersRouter);
+app.use('/api/audit-log', requireDb, auditLogRouter);
 
 // ─── 新 API routes ────────────────────────────────────────
 // v0.6.1 注意：目前還是用 authStub（system/admin）、Sprint 3-5 完成 client login UI 後、

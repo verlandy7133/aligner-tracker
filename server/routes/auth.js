@@ -45,6 +45,7 @@ function userToObj(u) {
     role: u.role,
     permissions: JSON.parse(u.permissions || '[]'),
     isActive: u.is_active === 1,
+    passwordless: u.passwordless === 1,
     createdAt: u.created_at,
     updatedAt: u.updated_at,
     lastLoginAt: u.last_login_at,
@@ -93,23 +94,32 @@ router.post('/bootstrap-admin', async (req, res) => {
 });
 
 // ─── POST /api/auth/login ─────────────────────────────
-// body: { username, password }
+// body: { username, password? }
+// passwordless 帳號可以省略 password（不過 client 還是建議帶空字串）
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body || {};
-    if (!username || !password) {
-      return res.status(400).json({ error: 'validation_error', message: 'username + password required' });
+    if (!username) {
+      return res.status(400).json({ error: 'validation_error', message: 'username required' });
     }
     const db = getDb();
     const u = db.prepare('SELECT * FROM users WHERE username = ? AND is_active = 1').get(username);
     if (!u) {
       // 避免 timing attack：故意 await scrypt 一次
-      await verifyPassword(password, 'scrypt$0$0');
+      await verifyPassword(password || '', 'scrypt$0$0');
       return res.status(401).json({ error: 'invalid_credentials', message: '帳號或密碼錯誤' });
     }
-    const ok = await verifyPassword(password, u.password_hash);
-    if (!ok) {
-      return res.status(401).json({ error: 'invalid_credentials', message: '帳號或密碼錯誤' });
+    // passwordless 帳號：略過密碼比對、直接核可
+    if (u.passwordless === 1) {
+      // 不接受任何 password、即便有送也忽略
+    } else {
+      if (!password) {
+        return res.status(400).json({ error: 'validation_error', message: 'password required' });
+      }
+      const ok = await verifyPassword(password, u.password_hash);
+      if (!ok) {
+        return res.status(401).json({ error: 'invalid_credentials', message: '帳號或密碼錯誤' });
+      }
     }
     // update last_login_at
     db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(nowIso(), u.id);
@@ -119,6 +129,24 @@ router.post('/login', async (req, res) => {
     res.json({ data: { user: userToObj(u), token } });
   } catch (e) {
     console.error('[auth/login]', e);
+    res.status(500).json({ error: 'internal_error', message: e.message });
+  }
+});
+
+// ─── GET /api/auth/passwordless-check?username=X ──────
+// Client 在登入頁輸入 username 後、用此 endpoint 探測該帳號是否 passwordless
+// 不洩漏 user 存在與否（不存在 / 存在但需密碼 都回 passwordless:false）
+router.get('/passwordless-check', (req, res) => {
+  try {
+    const username = req.query.username ? String(req.query.username) : '';
+    if (!username) {
+      return res.json({ data: { passwordless: false } });
+    }
+    const db = getDb();
+    const u = db.prepare('SELECT passwordless FROM users WHERE username = ? AND is_active = 1').get(username);
+    res.json({ data: { passwordless: u?.passwordless === 1 } });
+  } catch (e) {
+    console.error('[auth/passwordless-check]', e);
     res.status(500).json({ error: 'internal_error', message: e.message });
   }
 });

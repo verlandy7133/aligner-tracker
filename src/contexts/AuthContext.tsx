@@ -21,6 +21,7 @@ export type CurrentUser = {
   role: string;
   permissions: string[];
   isActive: boolean;
+  passwordless?: boolean;
 };
 
 type LoginResult =
@@ -74,11 +75,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // 註冊 401 handler — 由 api-client 在收到 401 時呼叫
+  // 注意：使用 setState callback form 拿到當前 phase，避免在 'loading' / 'bootstrap-needed' 期間
+  // 被 DataLayer.start() 觸發的 401 race 蓋掉 — 只在已 authenticated 時降級
   useEffect(() => {
     if (!REQUIRES_AUTH) return;
     setUnauthorizedHandler((reason) => {
-      setAuthToken(null);
-      setState({ phase: 'unauthenticated', reason });
+      setState((prev) => {
+        if (prev.phase !== 'authenticated') return prev; // 還沒登入過、忽略無謂的 401
+        setAuthToken(null);
+        return { phase: 'unauthenticated', reason };
+      });
     });
     return () => setUnauthorizedHandler(null);
   }, []);

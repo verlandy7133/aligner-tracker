@@ -3,9 +3,16 @@
 // 兩種 mode（由 AuthContext.state.phase 決定）：
 //   'unauthenticated' → 顯示登入表單
 //   'bootstrap-needed' → 顯示首次建立 admin 帳號表單
+//
+// v0.6.2 新增：passwordless 帳號偵測
+//   - 輸入帳號後 debounce 500ms、打 /api/auth/passwordless-check
+//   - 若該帳號是 passwordless → 自動隱藏密碼欄、按鈕變「直接進入」
+//   - 不洩漏帳號是否存在（passwordless:false 包括「不存在」+「需密碼」兩種）
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+
+const API_BASE = (import.meta.env.VITE_API_BASE as string) || '';
 
 export default function LoginPage() {
   const { state, login, bootstrapAdmin } = useAuth();
@@ -16,9 +23,43 @@ export default function LoginPage() {
   const [displayName, setDisplayName] = useState(isBootstrap ? '主上' : '');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [isPasswordless, setIsPasswordless] = useState(false);
+  const [checkingPasswordless, setCheckingPasswordless] = useState(false);
 
   const initialError =
     state.phase === 'unauthenticated' && state.reason ? state.reason : null;
+
+  // 偵測 passwordless：debounce 500ms 後打 server
+  useEffect(() => {
+    if (isBootstrap) return; // bootstrap 一定要密碼
+    const u = username.trim();
+    if (!u) {
+      setIsPasswordless(false);
+      return;
+    }
+    setCheckingPasswordless(true);
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(
+          `${API_BASE}/api/auth/passwordless-check?username=${encodeURIComponent(u)}`,
+        );
+        if (r.ok) {
+          const data = await r.json();
+          setIsPasswordless(!!data?.data?.passwordless);
+        } else {
+          setIsPasswordless(false);
+        }
+      } catch {
+        setIsPasswordless(false);
+      } finally {
+        setCheckingPasswordless(false);
+      }
+    }, 500);
+    return () => {
+      clearTimeout(t);
+      setCheckingPasswordless(false);
+    };
+  }, [username, isBootstrap]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -27,7 +68,7 @@ export default function LoginPage() {
     try {
       const r = isBootstrap
         ? await bootstrapAdmin(username.trim(), password, displayName.trim() || username.trim())
-        : await login(username.trim(), password);
+        : await login(username.trim(), isPasswordless ? '' : password);
       if (!r.ok) setError(r.error);
     } finally {
       setSubmitting(false);
@@ -74,6 +115,14 @@ export default function LoginPage() {
               required
               className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-700 text-sm text-zinc-100 focus:outline-none focus:border-sky-500/50"
             />
+            {!isBootstrap && isPasswordless && (
+              <p className="text-[10px] text-amber-400 mt-1">
+                ⚡ 此帳號為共用機帳號、免密碼登入
+              </p>
+            )}
+            {!isBootstrap && checkingPasswordless && (
+              <p className="text-[10px] text-zinc-600 mt-1">確認帳號類型中…</p>
+            )}
           </div>
 
           {isBootstrap && (
@@ -88,21 +137,23 @@ export default function LoginPage() {
             </div>
           )}
 
-          <div>
-            <label className="block text-xs text-zinc-400 mb-1">密碼</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete={isBootstrap ? 'new-password' : 'current-password'}
-              required
-              minLength={4}
-              className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-700 text-sm text-zinc-100 focus:outline-none focus:border-sky-500/50"
-            />
-            {isBootstrap && (
-              <p className="text-[10px] text-zinc-600 mt-1">至少 4 字、之後可以改</p>
-            )}
-          </div>
+          {!isPasswordless && (
+            <div>
+              <label className="block text-xs text-zinc-400 mb-1">密碼</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete={isBootstrap ? 'new-password' : 'current-password'}
+                required
+                minLength={4}
+                className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-700 text-sm text-zinc-100 focus:outline-none focus:border-sky-500/50"
+              />
+              {isBootstrap && (
+                <p className="text-[10px] text-zinc-600 mt-1">至少 4 字、之後可以改</p>
+              )}
+            </div>
+          )}
         </div>
 
         <button
@@ -110,7 +161,13 @@ export default function LoginPage() {
           disabled={submitting}
           className="w-full px-3 py-2 rounded-md bg-sky-500 text-zinc-950 font-medium hover:bg-sky-400 transition disabled:opacity-50"
         >
-          {submitting ? '處理中...' : isBootstrap ? '建立 + 登入' : '登入'}
+          {submitting
+            ? '處理中...'
+            : isBootstrap
+            ? '建立 + 登入'
+            : isPasswordless
+            ? '直接進入'
+            : '登入'}
         </button>
 
         {!isBootstrap && (

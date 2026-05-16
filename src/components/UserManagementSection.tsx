@@ -50,7 +50,7 @@ const ROLE_LABEL: Record<string, string> = {
   custom: '自訂',
 };
 
-type User = CurrentUser & { createdAt: string; lastLoginAt: string | null };
+type User = CurrentUser & { createdAt: string; lastLoginAt: string | null; passwordless?: boolean };
 
 export default function UserManagementSection() {
   const canManage = usePermission('settings.users');
@@ -134,6 +134,9 @@ export default function UserManagementSection() {
                     ) : (
                       <span className="text-zinc-500">停用</span>
                     )}
+                    {u.passwordless && (
+                      <span className="ml-1 text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">免密</span>
+                    )}
                   </td>
                   <td className="py-2 text-zinc-500 text-xs">
                     {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('zh-TW') : '從未'}
@@ -188,6 +191,7 @@ function UserEditModal({
     t?.permissions || ROLE_TEMPLATES['order-clerk'],
   );
   const [isActive, setIsActive] = useState(t?.isActive ?? true);
+  const [passwordless, setPasswordless] = useState(t?.passwordless ?? false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -210,11 +214,20 @@ function UserEditModal({
     setError(null);
     setSaving(true);
     try {
+      // passwordless 帳號不要求 password；一般帳號 password 必填（新增時）
+      if (isNew && !passwordless && (!password || password.length < 4)) {
+        setError('一般帳號密碼至少 4 字（或勾「免密碼登入」）');
+        setSaving(false);
+        return;
+      }
       if (isNew) {
-        await apiPost('/api/users', { username, password, displayName, role, permissions });
+        const body: Record<string, unknown> = { username, displayName, role, permissions, passwordless };
+        if (!passwordless) body.password = password;
+        await apiPost('/api/users', body);
       } else {
-        await apiPut(`/api/users/${t!.id}`, { displayName, role, permissions, isActive });
-        if (password) {
+        await apiPut(`/api/users/${t!.id}`, { displayName, role, permissions, isActive, passwordless });
+        // 編輯時、有輸入新密碼才更新（且當前不是 passwordless）
+        if (password && !passwordless) {
           await apiPost(`/api/users/${t!.id}/password`, { newPassword: password });
         }
       }
@@ -288,19 +301,37 @@ function UserEditModal({
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs text-zinc-400 mb-1">
-              密碼 {!isNew && '(留空 = 不改)'}
-            </label>
+          {/* 免密碼登入勾選 — 放密碼欄上面、勾了就把密碼欄藏起來 */}
+          <label className="flex items-center gap-2 text-sm text-zinc-300">
             <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              minLength={4}
-              autoComplete="new-password"
-              className="w-full px-3 py-2 rounded-md bg-zinc-900 border border-zinc-700 text-sm text-zinc-100"
+              type="checkbox"
+              checked={passwordless}
+              onChange={(e) => setPasswordless(e.target.checked)}
+              className="accent-amber-500"
             />
-          </div>
+            <span>
+              <span className="text-amber-300">⚠️ 免密碼登入</span>
+              <span className="text-[11px] text-zinc-500 ml-1">
+                （適合共用機 / iPad、只用帳號名稱就能進；LAN/VPN 內任何人都可進此帳號、勿勾 admin）
+              </span>
+            </span>
+          </label>
+
+          {!passwordless && (
+            <div>
+              <label className="block text-xs text-zinc-400 mb-1">
+                密碼 {!isNew && '(留空 = 不改)'}
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                minLength={4}
+                autoComplete="new-password"
+                className="w-full px-3 py-2 rounded-md bg-zinc-900 border border-zinc-700 text-sm text-zinc-100"
+              />
+            </div>
+          )}
 
           {!isNew && (
             <label className="flex items-center gap-2 text-sm text-zinc-300">

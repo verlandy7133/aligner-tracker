@@ -28,5 +28,9 @@ dev-data/
 **/patients-import*.json
 **/patients-backup*.json
 
+# v0.6.0 自動備份輸出（含 PII、絕對不能 commit）
+backups/
+aligner-tracker-backup-*.json
+
 # Stage B build log (post-commit hook 寫入)
 .stage-b-build.log

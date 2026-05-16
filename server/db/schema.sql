@@ -113,13 +113,16 @@ CREATE INDEX IF NOT EXISTS idx_audit_ts        ON audit_log(ts);
 CREATE INDEX IF NOT EXISTS idx_audit_entity    ON audit_log(entity, entity_id);
 CREATE INDEX IF NOT EXISTS idx_audit_user      ON audit_log(user_id);
 
--- ─── users (Phase 1 schema-only、無 row) ──────────────────
+-- ─── users (v0.6.1 Phase 2 啟用)─────────────────────────
+-- permissions 是 JSON array of permission strings (effective、role template apply 後存進來)
+-- role 欄保留當「顯示用標籤」、不影響權限檢查
 CREATE TABLE IF NOT EXISTS users (
   id              TEXT PRIMARY KEY,
   username        TEXT UNIQUE NOT NULL,
   password_hash   TEXT NOT NULL,
   display_name    TEXT NOT NULL,
   role            TEXT NOT NULL DEFAULT 'viewer',
+  permissions     TEXT NOT NULL DEFAULT '[]',
   is_active       INTEGER NOT NULL DEFAULT 1,
   created_at      TEXT NOT NULL,
   updated_at      TEXT NOT NULL,

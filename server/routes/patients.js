@@ -19,6 +19,7 @@ import { getDb } from '../db/db.js';
 import { patientRowToObj, patientObjToRow } from '../lib/json-fields.js';
 import { checkVersion } from '../middleware/optimistic-lock.js';
 import { audit } from '../middleware/audit.js';
+import { requirePermission } from '../middleware/auth.js';
 import { sse } from '../events/sse.js';
 
 const router = express.Router();
@@ -34,7 +35,7 @@ function findById(id) {
 }
 
 // ─── GET /api/patients ────────────────────────────────────
-router.get('/', (req, res) => {
+router.get('/', requirePermission('patient.view'), (req, res) => {
   const since = req.query.since ? String(req.query.since) : null;
   let stmt;
   let rows;
@@ -52,7 +53,7 @@ router.get('/', (req, res) => {
 });
 
 // ─── GET /api/patients/:id ────────────────────────────────
-router.get('/:id', (req, res) => {
+router.get('/:id', requirePermission('patient.view'), (req, res) => {
   const p = findById(req.params.id);
   if (!p) return res.status(404).json({ error: 'not_found', id: req.params.id });
   res.json({ data: p, meta: { version: p._version, updatedAt: p.updatedAt } });
@@ -60,7 +61,7 @@ router.get('/:id', (req, res) => {
 
 // ─── POST /api/patients ──────────────────────────────────
 // Body: 完整 Patient 物件（id 可選、不給就 server 生）
-router.post('/', audit('patient'), (req, res) => {
+router.post('/', requirePermission('patient.create'), audit('patient'), (req, res) => {
   const body = req.body;
   if (!body || typeof body !== 'object') {
     return res.status(400).json({ error: 'validation_error', message: 'body required' });
@@ -140,7 +141,7 @@ function toUpdateParams(row, userId) {
 
 // ─── PUT /api/patients/:id ───────────────────────────────
 // 全量替換（client 帶完整 patient + version）
-router.put('/:id', checkVersion('patients'), audit('patient'), (req, res) => {
+router.put('/:id', requirePermission('patient.edit'), checkVersion('patients'), audit('patient'), (req, res) => {
   const id = req.params.id;
   req.beforeRow = findById(id); // 給 audit 用
   const body = req.body;
@@ -162,7 +163,9 @@ router.put('/:id', checkVersion('patients'), audit('patient'), (req, res) => {
 
 // ─── PATCH /api/patients/:id ─────────────────────────────
 // 部分更新（merge）
-router.patch('/:id', checkVersion('patients'), audit('patient'), (req, res) => {
+// 注意：patient.edit 是 master perm、notes / photos / consent 子權限目前沒分流（V1 簡化）
+//      未來可在 handler 內檢查 patch 內欄位、要求對應子權限
+router.patch('/:id', requirePermission('patient.edit'), checkVersion('patients'), audit('patient'), (req, res) => {
   const id = req.params.id;
   const before = findById(id);
   req.beforeRow = before;
@@ -186,7 +189,7 @@ router.patch('/:id', checkVersion('patients'), audit('patient'), (req, res) => {
 });
 
 // ─── DELETE /api/patients/:id ────────────────────────────
-router.delete('/:id', checkVersion('patients'), audit('patient'), (req, res) => {
+router.delete('/:id', requirePermission('patient.delete'), checkVersion('patients'), audit('patient'), (req, res) => {
   const id = req.params.id;
   req.beforeRow = findById(id);
   const r = getDb().prepare('DELETE FROM patients WHERE id = ?').run(id);
@@ -200,7 +203,8 @@ router.delete('/:id', checkVersion('patients'), audit('patient'), (req, res) => 
 // ─── POST /api/patients/bulk ─────────────────────────────
 // Body: { patients: Patient[] }
 // 行為：INSERT OR REPLACE 每筆；不檢查 version（bulk 視為 admin override）
-router.post('/bulk', audit('patient'), (req, res) => {
+// 需 patient.create + settings.data（因為 bulk 是「資料工具」級別的危險動作）
+router.post('/bulk', requirePermission('settings.data'), audit('patient'), (req, res) => {
   const patients = req.body?.patients ?? [];
   if (!Array.isArray(patients)) {
     return res.status(400).json({ error: 'validation_error', message: 'patients array required' });

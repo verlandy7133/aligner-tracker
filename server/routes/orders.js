@@ -9,6 +9,7 @@ import { getDb } from '../db/db.js';
 import { orderRowToObj, orderObjToRow } from '../lib/json-fields.js';
 import { checkVersion } from '../middleware/optimistic-lock.js';
 import { audit } from '../middleware/audit.js';
+import { requirePermission } from '../middleware/auth.js';
 import { sse } from '../events/sse.js';
 
 const router = express.Router();
@@ -24,7 +25,7 @@ function findById(id) {
 
 // ─── GET /api/orders ──────────────────────────────────────
 // Query: ?since=<iso-ts> | ?patientId=<id>
-router.get('/', (req, res) => {
+router.get('/', requirePermission('order.view'), (req, res) => {
   const since = req.query.since ? String(req.query.since) : null;
   const patientId = req.query.patientId ? String(req.query.patientId) : null;
   const db = getDb();
@@ -47,14 +48,14 @@ router.get('/', (req, res) => {
 });
 
 // ─── GET /api/orders/:id ──────────────────────────────────
-router.get('/:id', (req, res) => {
+router.get('/:id', requirePermission('order.view'), (req, res) => {
   const o = findById(req.params.id);
   if (!o) return res.status(404).json({ error: 'not_found', id: req.params.id });
   res.json({ data: o, meta: { version: o._version, updatedAt: o.updatedAt } });
 });
 
 // ─── POST /api/orders ────────────────────────────────────
-router.post('/', audit('order'), (req, res) => {
+router.post('/', requirePermission('order.create'), audit('order'), (req, res) => {
   const body = req.body;
   if (!body || typeof body !== 'object') {
     return res.status(400).json({ error: 'validation_error', message: 'body required' });
@@ -118,7 +119,7 @@ function toUpdateParams(row, userId) {
 }
 
 // ─── PUT /api/orders/:id ─────────────────────────────────
-router.put('/:id', checkVersion('orders'), audit('order'), (req, res) => {
+router.put('/:id', requirePermission('order.edit'), checkVersion('orders'), audit('order'), (req, res) => {
   const id = req.params.id;
   req.beforeRow = findById(id);
   const body = req.body;
@@ -136,7 +137,7 @@ router.put('/:id', checkVersion('orders'), audit('order'), (req, res) => {
 });
 
 // ─── PATCH /api/orders/:id ───────────────────────────────
-router.patch('/:id', checkVersion('orders'), audit('order'), (req, res) => {
+router.patch('/:id', requirePermission('order.edit'), checkVersion('orders'), audit('order'), (req, res) => {
   const id = req.params.id;
   const before = findById(id);
   req.beforeRow = before;
@@ -157,7 +158,7 @@ router.patch('/:id', checkVersion('orders'), audit('order'), (req, res) => {
 });
 
 // ─── DELETE /api/orders/:id ──────────────────────────────
-router.delete('/:id', checkVersion('orders'), audit('order'), (req, res) => {
+router.delete('/:id', requirePermission('order.delete'), checkVersion('orders'), audit('order'), (req, res) => {
   const id = req.params.id;
   req.beforeRow = findById(id);
   const r = getDb().prepare('DELETE FROM orders WHERE id = ?').run(id);
@@ -171,7 +172,7 @@ router.delete('/:id', checkVersion('orders'), audit('order'), (req, res) => {
 });
 
 // ─── POST /api/orders/bulk ───────────────────────────────
-router.post('/bulk', audit('order'), (req, res) => {
+router.post('/bulk', requirePermission('settings.data'), audit('order'), (req, res) => {
   const orders = req.body?.orders ?? [];
   if (!Array.isArray(orders)) {
     return res.status(400).json({ error: 'validation_error', message: 'orders array required' });

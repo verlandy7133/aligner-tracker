@@ -7,7 +7,32 @@
 import express from 'express';
 import { getDb } from '../db/db.js';
 import { audit } from '../middleware/audit.js';
+import { authRequired } from '../middleware/auth.js';
 import { sse } from '../events/sse.js';
+
+// 依 key 對應 permission
+// 讀全部 settings 都允許（只要 logged in）、寫的話分流
+function permForKey(key) {
+  if (key === 'doctors') return 'settings.doctors';
+  if (key === 'labs') return 'settings.labs';
+  // theme / theme-custom / ui-scale / alert-thresholds / 其他 → preferences
+  return 'settings.preferences';
+}
+
+import { hasPermission } from '../lib/permissions.js';
+
+function requirePermForKey(req, res, next) {
+  const key = req.params.key;
+  const perm = permForKey(key);
+  if (!hasPermission(req.user?.permissions || [], perm)) {
+    return res.status(403).json({
+      error: 'forbidden',
+      message: `沒有權限修改設定 "${key}"：需要 ${perm}`,
+      required: perm,
+    });
+  }
+  next();
+}
 
 const router = express.Router();
 
@@ -30,6 +55,9 @@ function rowToObj(row) {
     : null;
 }
 
+// 全部 endpoint 需登入（讀也要）
+router.use(authRequired);
+
 // ─── GET /api/settings ────────────────────────────────────
 router.get('/', (_req, res) => {
   const rows = getDb().prepare('SELECT * FROM settings ORDER BY key').all();
@@ -44,8 +72,8 @@ router.get('/:key', (req, res) => {
 });
 
 // ─── PUT /api/settings/:key ──────────────────────────────
-// upsert
-router.put('/:key', audit('setting'), (req, res) => {
+// upsert，按 key 套對應 permission
+router.put('/:key', requirePermForKey, audit('setting'), (req, res) => {
   const key = req.params.key;
   const value = req.body?.value !== undefined ? req.body.value : req.body;
   const now = nowIso();
@@ -63,7 +91,7 @@ router.put('/:key', audit('setting'), (req, res) => {
 });
 
 // ─── DELETE /api/settings/:key ───────────────────────────
-router.delete('/:key', audit('setting'), (req, res) => {
+router.delete('/:key', requirePermForKey, audit('setting'), (req, res) => {
   const key = req.params.key;
   req.beforeRow = getDb().prepare('SELECT * FROM settings WHERE key = ?').get(key);
   const r = getDb().prepare('DELETE FROM settings WHERE key = ?').run(key);

@@ -6,6 +6,7 @@
 
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
+import { getDataLayer } from './data-layer';
 import type { ProductLine } from '../types/Patient';
 
 export type Lab = {
@@ -33,7 +34,7 @@ export async function loadLabs(): Promise<Lab[]> {
 }
 
 export async function saveLabs(labs: Lab[]): Promise<void> {
-  await db.settings.put({ key: SETTINGS_KEY, value: labs });
+  await getDataLayer().putSetting(SETTINGS_KEY, labs);
 }
 
 export async function ensureDefaultLabsSeeded(): Promise<void> {

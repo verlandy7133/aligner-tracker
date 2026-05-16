@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './db';
+import { getDataLayer } from './lib/data-layer';
 import { injectCustomThemeCSS, removeCustomThemeCSS } from './lib/custom-theme-css';
 
 export const THEMES = ['current', 'fashion', 'plain', 'modern', 'custom'] as const;
@@ -63,7 +64,7 @@ export async function loadCustomConfig(): Promise<CustomThemeConfig> {
 }
 
 export async function saveCustomConfig(c: CustomThemeConfig): Promise<void> {
-  await db.settings.put({ key: CUSTOM_KEY, value: c });
+  await getDataLayer().putSetting(CUSTOM_KEY, c);
 }
 
 export function useCustomConfig(): CustomThemeConfig {
@@ -86,7 +87,7 @@ export async function loadTheme(): Promise<Theme> {
 }
 
 export async function saveTheme(theme: Theme): Promise<void> {
-  await db.settings.put({ key: SETTINGS_KEY, value: theme });
+  await getDataLayer().putSetting(SETTINGS_KEY, theme);
 }
 
 export function applyTheme(theme: Theme) {

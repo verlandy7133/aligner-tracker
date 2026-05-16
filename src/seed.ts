@@ -1,3 +1,9 @@
+// v0.6.0 注意：seed.ts 首次安裝才會跑（Dexie 空時），用 db.* 直接寫不走 dataLayer
+//   - 跑時可能 DualDataLayer.start() 還沒連上 server、走 dataLayer 會 OfflineError
+//   - dual 模式 production 部署時、server 已從 sync.json migrate 完、Dexie initial sync 後 count>0
+//     → seed 永遠 skip、不會雙寫衝突
+//   - 若真的 seed 跑了（罕見 edge case）、user 需手動「推到 NAS」一次同步上 server
+
 import { db } from './db';
 import { ensureDefaultLabsSeeded } from './lib/labs';
 import { ensureDefaultDoctorsSeeded } from './lib/doctors';

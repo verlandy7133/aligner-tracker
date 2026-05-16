@@ -22,14 +22,67 @@ import type {
   OrderFilter,
 } from './data-layer';
 import { api, apiGet, apiBase, NetworkError } from './api-client';
+import { normalizePatient, denormalizePatient } from './path-normalize';
+import { getPaths } from './helper-client';
 
 type ServerResponse<T> = { data: T; meta?: Record<string, unknown> };
 
-// server 回 patient/order 物件 — 含 _version / _createdBy / _updatedBy
-// client 端視角直接用 _version 取版本號
-function unwrapPatient(p: any): Patient {
-  return p as Patient;
+// v0.6.0 path normalization：
+//   - Server SQLite 內 sourceFolder / consentPdfPath 為 relative path（沿用 sync.json v2 慣例）
+//   - 本機 Dexie + UI 全用 absolute path（其他 UI code 都假設 absolute）
+//   - ApiDataLayer 是邊界：fetch server 後 denormalize、send to server 前 normalize
+//
+// dataRoot 從 helper-client.getPaths() 拿、cache 一次（不會頻繁變）
+let _dataRootCache: string | null = null;
+let _dataRootFetch: Promise<string | null> | null = null;
+async function getDataRoot(): Promise<string | null> {
+  if (_dataRootCache !== null) return _dataRootCache;
+  if (_dataRootFetch) return _dataRootFetch;
+  _dataRootFetch = (async () => {
+    try {
+      const r = await getPaths();
+      if (r.state === 'ok' && r.paths?.dataRoot) {
+        _dataRootCache = r.paths.dataRoot;
+        return _dataRootCache;
+      }
+    } catch (e) {
+      console.warn('[ApiDataLayer] getDataRoot failed:', e);
+    }
+    return null;
+  })();
+  return _dataRootFetch;
 }
+
+// 已從 server 拿到 → denormalize（relative → absolute）
+async function unwrapPatient(p: any): Promise<Patient> {
+  const dataRoot = await getDataRoot();
+  if (!dataRoot) return p as Patient;
+  return denormalizePatient(p as Patient, dataRoot);
+}
+async function unwrapPatients(arr: any[]): Promise<Patient[]> {
+  const dataRoot = await getDataRoot();
+  if (!dataRoot) return arr as Patient[];
+  return arr.map((p) => denormalizePatient(p as Patient, dataRoot));
+}
+
+// 要送到 server → normalize（absolute → relative）
+async function wrapPatient<T extends Partial<Patient>>(p: T): Promise<T> {
+  const dataRoot = await getDataRoot();
+  if (!dataRoot) return p;
+  // 只 normalize 兩個 path 欄位、其他原樣
+  const result: any = { ...p };
+  if (typeof p.sourceFolder === 'string') {
+    const { sourceFolder } = normalizePatient({ ...p, sourceFolder: p.sourceFolder } as Patient, dataRoot);
+    result.sourceFolder = sourceFolder;
+  }
+  if (p.consentPdfPath !== undefined) {
+    const { consentPdfPath } = normalizePatient({ ...p, consentPdfPath: p.consentPdfPath ?? null } as Patient, dataRoot);
+    result.consentPdfPath = consentPdfPath;
+  }
+  return result;
+}
+
+// Orders 沒 path 欄位、直接 passthrough
 function unwrapOrder(o: any): Order {
   return o as Order;
 }
@@ -149,7 +202,7 @@ export class ApiDataLayer implements DataLayer {
   async getPatient(id: string): Promise<Patient | null> {
     try {
       const r = await apiGet<ServerResponse<Patient>>(`/api/patients/${encodeURIComponent(id)}`);
-      return unwrapPatient(r.data);
+      return await unwrapPatient(r.data);
     } catch (e: any) {
       if (e?.status === 404) return null;
       throw e;
@@ -159,31 +212,34 @@ export class ApiDataLayer implements DataLayer {
   async listPatients(filter?: PatientFilter): Promise<Patient[]> {
     const qs = filter?.since ? `?since=${encodeURIComponent(filter.since)}` : '';
     const r = await apiGet<ServerResponse<Patient[]>>(`/api/patients${qs}`);
-    let list = r.data.map(unwrapPatient);
+    let list = await unwrapPatients(r.data);
     if (filter?.status) list = list.filter((p) => p.status === filter.status);
     if (filter?.productLine) list = list.filter((p) => p.productLine === filter.productLine);
     return list;
   }
 
   async createPatient(p: Partial<Patient> & Pick<Patient, 'chartNo' | 'name' | 'productLine' | 'status'>): Promise<Patient> {
-    const r = await api<ServerResponse<Patient>>('/api/patients', { method: 'POST', body: p });
-    return unwrapPatient(r.data);
+    const body = await wrapPatient(p);
+    const r = await api<ServerResponse<Patient>>('/api/patients', { method: 'POST', body });
+    return await unwrapPatient(r.data);
   }
 
   async updatePatient(id: string, patch: Partial<Patient>, version: number): Promise<Patient> {
+    const normalized = await wrapPatient(patch);
     const r = await api<ServerResponse<Patient>>(`/api/patients/${encodeURIComponent(id)}`, {
       method: 'PATCH',
-      body: { ...patch, version },
+      body: { ...normalized, version },
     });
-    return unwrapPatient(r.data);
+    return await unwrapPatient(r.data);
   }
 
   async putPatient(p: Patient, version: number): Promise<Patient> {
+    const normalized = await wrapPatient(p);
     const r = await api<ServerResponse<Patient>>(`/api/patients/${encodeURIComponent(p.id)}`, {
       method: 'PUT',
-      body: { ...p, version },
+      body: { ...normalized, version },
     });
-    return unwrapPatient(r.data);
+    return await unwrapPatient(r.data);
   }
 
   async deletePatient(id: string, version: number): Promise<void> {
@@ -191,7 +247,8 @@ export class ApiDataLayer implements DataLayer {
   }
 
   async bulkPutPatients(patients: Patient[]): Promise<void> {
-    await api('/api/patients/bulk', { method: 'POST', body: { patients } });
+    const normalized = await Promise.all(patients.map((p) => wrapPatient(p)));
+    await api('/api/patients/bulk', { method: 'POST', body: { patients: normalized } });
   }
 
   // ─── Orders ──

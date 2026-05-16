@@ -15,6 +15,7 @@ import { labBadgeStyle, useLabs } from '../lib/labs';
 import { doctorBadgeStyle, useDoctors } from '../lib/doctors';
 import { READ_ONLY } from '../lib/read-only';
 import { openAuuForPatient } from '../lib/auu';
+import { usePermission } from '../contexts/AuthContext';
 import {
   deriveOrderAlerts,
   ORDER_ALERT_BADGE,
@@ -206,22 +207,7 @@ export default function OrderTracking() {
           >
             🖨 月報
           </a>
-          {!READ_ONLY && (
-            <>
-              <button
-                onClick={() => setPatientModalTarget('new')}
-                className="px-3 py-2 rounded-md text-sm border border-sky-500/40 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20 transition"
-              >
-                + 新增病患
-              </button>
-              <button
-                onClick={() => setModalTarget('new')}
-                className="px-3 py-2 rounded-md text-sm bg-sky-500 text-zinc-950 font-medium hover:bg-sky-400 transition"
-              >
-                + 新增下單
-              </button>
-            </>
-          )}
+          {!READ_ONLY && <OrderTrackingActions onCreatePatient={() => setPatientModalTarget('new')} onCreateOrder={() => setModalTarget('new')} />}
         </div>
       </header>
 
@@ -404,6 +390,39 @@ export default function OrderTracking() {
 
       <AlertSettingsModal open={alertSettingsOpen} onClose={() => setAlertSettingsOpen(false)} />
     </div>
+  );
+}
+
+// v0.6.1: 新增按鈕的權限包裝
+function OrderTrackingActions({
+  onCreatePatient,
+  onCreateOrder,
+}: {
+  onCreatePatient: () => void;
+  onCreateOrder: () => void;
+}) {
+  const canCreatePatient = usePermission('patient.create');
+  const canCreateOrder = usePermission('order.create');
+  if (!canCreatePatient && !canCreateOrder) return null;
+  return (
+    <>
+      {canCreatePatient && (
+        <button
+          onClick={onCreatePatient}
+          className="px-3 py-2 rounded-md text-sm border border-sky-500/40 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20 transition"
+        >
+          + 新增病患
+        </button>
+      )}
+      {canCreateOrder && (
+        <button
+          onClick={onCreateOrder}
+          className="px-3 py-2 rounded-md text-sm bg-sky-500 text-zinc-950 font-medium hover:bg-sky-400 transition"
+        >
+          + 新增下單
+        </button>
+      )}
+    </>
   );
 }
 

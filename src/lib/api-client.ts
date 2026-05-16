@@ -39,6 +39,26 @@ export function setClientName(name: string): void {
 export const clientId = getOrCreateClientId();
 export const apiBase = API_BASE;
 
+// ─── Auth token (v0.6.1 Phase 2)──────────────────────
+// localStorage key、AuthContext 寫入 / 清除、api() 從這裡讀
+const TOKEN_KEY = 'aligner-tracker.token';
+
+export function getAuthToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+export function setAuthToken(token: string | null): void {
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+}
+
+// 401 處理：登入過期 / 無效 token → 觸發 logout
+// AuthContext 訂閱、收到後清 token 跳 login page
+type UnauthorizedHandler = (reason: string) => void;
+let _unauthorizedHandler: UnauthorizedHandler | null = null;
+export function setUnauthorizedHandler(h: UnauthorizedHandler | null): void {
+  _unauthorizedHandler = h;
+}
+
 // ─── Error types ─────────────────────────────────────
 export class ApiError extends Error {
   status: number;
@@ -94,6 +114,10 @@ export async function api<T = unknown>(path: string, opts: ApiOpts = {}): Promis
   if (opts.userId) headers['X-User-Id'] = opts.userId;
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
 
+  // v0.6.1: 自動塞 Authorization header（如果有 token）
+  const token = getAuthToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
   let res: Response;
   try {
     res = await fetch(url, {
@@ -117,6 +141,14 @@ export async function api<T = unknown>(path: string, opts: ApiOpts = {}): Promis
   }
 
   if (res.ok) return payload as T;
+
+  // v0.6.1: 401 → 通知 AuthContext 登出
+  // 不在這 path 上的 401（例如 /api/auth/login 密碼錯）不觸發 — 登入頁面自己處理
+  if (res.status === 401 && !path.startsWith('/api/auth/')) {
+    if (_unauthorizedHandler) {
+      _unauthorizedHandler(payload?.message || '登入過期、請重新登入');
+    }
+  }
 
   // Typed error responses
   if (res.status === 409 && payload?.error === 'version_conflict') {

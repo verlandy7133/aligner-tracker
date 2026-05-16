@@ -7,6 +7,7 @@ import PatientFormModal from '../components/PatientFormModal';
 import { derivePatientAlert } from '../config/alerts';
 import { deriveProgress } from '../lib/progress';
 import { READ_ONLY } from '../lib/read-only';
+import { usePermission } from '../contexts/AuthContext';
 import {
   STATUS_LABEL,
   STATUS_BADGE,
@@ -41,6 +42,7 @@ export default function PatientList() {
   const [modalTarget, setModalTarget] = useState<Patient | 'new' | null>(null);
 
   const navigate = useNavigate();
+  const canCreatePatient = usePermission('patient.create');
   const patients = useLiveQuery(() => db.patients.toArray()) ?? [];
   const orders = useLiveQuery(() => db.orders.toArray()) ?? [];
   const [missingOrderOnly, setMissingOrderOnly] = useState(false);
@@ -211,7 +213,7 @@ export default function PatientList() {
                 重置篩選
               </button>
             )}
-            {!READ_ONLY && (
+            {!READ_ONLY && canCreatePatient && (
               <button
                 onClick={() => setModalTarget('new')}
                 className="px-3 py-2 rounded-md text-sm bg-sky-500 text-zinc-950 font-medium hover:bg-sky-400 transition"

@@ -7,6 +7,7 @@ import { setDataLayer } from './lib/data-layer';
 import { DexieDataLayer } from './lib/data-layer-dexie';
 import { ApiDataLayer } from './lib/data-layer-api';
 import { DualDataLayer } from './lib/data-layer-dual';
+import { AuthProvider } from './contexts/AuthContext';
 
 // ─── DataLayer 初始化（v0.6.0） ───────────────────────
 // 選擇實作：環境變數 VITE_DATA_MODE
@@ -34,7 +35,9 @@ startFn?.call(layer).catch((e: unknown) => console.error('[main] DataLayer start
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-      <App />
+      <AuthProvider>
+        <App />
+      </AuthProvider>
     </BrowserRouter>
   </StrictMode>,
 );

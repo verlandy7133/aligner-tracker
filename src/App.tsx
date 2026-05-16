@@ -7,6 +7,8 @@ import OrderReportPage from './pages/OrderReportPage';
 import SettingsPage from './pages/SettingsPage';
 import ThemeSelector from './components/ThemeSelector';
 import { OnlineStatusBadge, OfflineBanner } from './components/OnlineStatus';
+import { useAuth } from './contexts/AuthContext';
+import LoginPage from './pages/LoginPage';
 import { seedIfEmpty } from './seed';
 import { useTheme } from './themes';
 import { initScale } from './lib/ui-scale';
@@ -19,6 +21,7 @@ const SYNC_LAST_PULLED_KEY = 'aligner-sync-last-pulled';
 
 export default function App() {
   useTheme(); // 套用儲存的主題
+  const { state: authState, user, logout } = useAuth();
   const [nasNewer, setNasNewer] = useState(false);
   const [readOnlyState, setReadOnlyState] = useState<{
     state: 'loading' | 'imported' | 'cached' | 'no-server' | 'error';
@@ -64,6 +67,18 @@ export default function App() {
     const lpu = lastPulled ? new Date(lastPulled).getTime() : 0;
     // NAS 比兩個基準時間都新（+5s 緩衝避免剛推完誤判）
     setNasNewer(nasMtime > Math.max(lp, lpu) + 5000);
+  }
+
+  // v0.6.1 Auth gate：未登入 / 首次 bootstrap → 跳 LoginPage
+  if (authState.phase === 'loading') {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-zinc-400">
+        驗證登入狀態…
+      </div>
+    );
+  }
+  if (authState.phase === 'unauthenticated' || authState.phase === 'bootstrap-needed') {
+    return <LoginPage />;
   }
 
   // readOnly mode + 還在 loading / error → show 提示頁
@@ -137,6 +152,23 @@ export default function App() {
             <div className="ml-2 flex items-center gap-3">
               <OnlineStatusBadge />
               <ThemeSelector />
+              {user && (
+                <div className="flex items-center gap-2 ml-2 pl-3 border-l border-zinc-800">
+                  <span
+                    className="text-xs text-zinc-400"
+                    title={`${user.username} · ${user.role}`}
+                  >
+                    {user.displayName}
+                  </span>
+                  <button
+                    onClick={logout}
+                    className="text-[10px] text-zinc-500 hover:text-rose-400 transition"
+                    title="登出"
+                  >
+                    登出
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

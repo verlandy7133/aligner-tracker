@@ -10,6 +10,7 @@
 
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
+import { getDataLayer } from '../lib/data-layer';
 import type { Order, Patient } from '../types/Patient';
 
 export type AlertThresholds = {
@@ -33,7 +34,7 @@ export async function loadThresholds(): Promise<AlertThresholds> {
 }
 
 export async function saveThresholds(t: AlertThresholds): Promise<void> {
-  await db.settings.put({ key: SETTINGS_KEY, value: t });
+  await getDataLayer().putSetting(SETTINGS_KEY, t);
 }
 
 export function useThresholds(): AlertThresholds {

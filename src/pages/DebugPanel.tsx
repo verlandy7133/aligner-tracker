@@ -27,6 +27,8 @@ export default function DebugPanel() {
 
   async function handleClearDb() {
     if (!confirm('確定要清空 IndexedDB？（dev 用，下次重整會重新匯入）')) return;
+    // v0.6.0: 只清本機 Dexie、不動 server（dev only）
+    // dual 模式重 load 後會從 server 拉回真相、本機資料丟也沒差
     await db.patients.clear();
     setSeedResult(null);
     location.reload();

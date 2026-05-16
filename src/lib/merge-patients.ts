@@ -15,6 +15,7 @@
 //   - allSourceFolders: 把 source.sourceFolder 加進去（保留 source 資料夾的歷史足跡）
 
 import { db } from '../db';
+import { getDataLayer } from './data-layer';
 import type { Patient } from '../types/Patient';
 
 export type MergeResult = {
@@ -40,29 +41,35 @@ export async function mergePatients(
   };
   const nowIso = new Date().toISOString();
 
-  await db.transaction('rw', db.patients, db.orders, async () => {
-    const source = await db.patients.get(sourceId);
-    const target = await db.patients.get(targetId);
-    if (!source) throw new Error(`找不到 source patient (id=${sourceId})`);
-    if (!target) throw new Error(`找不到 target patient (id=${targetId})`);
+  // v0.6.0: 拿掉 Dexie transaction、改 sequential dataLayer 呼叫
+  // 不是 atomic — 失敗會留半邊資料、但 dual 模式比較重要的是 server-led 寫
+  const dl = getDataLayer();
+  const source = await db.patients.get(sourceId);
+  const target = await db.patients.get(targetId);
+  if (!source) throw new Error(`找不到 source patient (id=${sourceId})`);
+  if (!target) throw new Error(`找不到 target patient (id=${targetId})`);
 
-    result.sourceLabel = `${source.chartNo} ${source.name}`;
-    result.targetLabel = `${target.chartNo} ${target.name}`;
+  result.sourceLabel = `${source.chartNo} ${source.name}`;
+  result.targetLabel = `${target.chartNo} ${target.name}`;
 
-    // 1. 轉 order patientId、同步更新 denormalized 欄位 (patientChartNo / patientName)
-    const orders = await db.orders.where('patientId').equals(sourceId).toArray();
-    for (const o of orders) {
-      await db.orders.update(o.id, {
+  // 1. 轉 order patientId、同步更新 denormalized 欄位 (patientChartNo / patientName)
+  const orders = await db.orders.where('patientId').equals(sourceId).toArray();
+  for (const o of orders) {
+    await dl.updateOrder(
+      o.id,
+      {
         patientId: targetId,
         patientChartNo: target.chartNo,
         patientName: target.name,
         updatedAt: nowIso,
-      });
-    }
-    result.ordersTransferred = orders.length;
+      },
+      o._version ?? 1,
+    );
+  }
+  result.ordersTransferred = orders.length;
 
-    // 2. 補 target 的空欄位（從 source 拿）
-    const patch: Partial<Patient> = {};
+  // 2. 補 target 的空欄位（從 source 拿）
+  const patch: Partial<Patient> = {};
     if (!target.birthday && source.birthday) {
       patch.birthday = source.birthday;
       result.fieldsMerged.push('birthday');
@@ -120,14 +127,13 @@ export async function mergePatients(
       result.fieldsMerged.push('allSourceFolders');
     }
 
-    if (Object.keys(patch).length > 0) {
-      patch.updatedAt = nowIso;
-      await db.patients.update(targetId, patch);
-    }
+  if (Object.keys(patch).length > 0) {
+    patch.updatedAt = nowIso;
+    await dl.updatePatient(targetId, patch, target._version ?? 1);
+  }
 
-    // 5. 刪 source patient
-    await db.patients.delete(sourceId);
-  });
+  // 5. 刪 source patient
+  await dl.deletePatient(sourceId, source._version ?? 1);
 
   return result;
 }

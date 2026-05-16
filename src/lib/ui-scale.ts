@@ -4,6 +4,7 @@
 
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
+import { getDataLayer } from './data-layer';
 
 const SETTINGS_KEY = 'ui-scale';
 export const DEFAULT_SCALE = 1.0;
@@ -22,7 +23,7 @@ export async function loadScale(): Promise<number> {
 
 export async function saveScale(scale: number): Promise<void> {
   const clamped = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale));
-  await db.settings.put({ key: SETTINGS_KEY, value: clamped });
+  await getDataLayer().putSetting(SETTINGS_KEY, clamped);
   applyScale(clamped);
 }
 

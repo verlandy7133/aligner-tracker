@@ -2,6 +2,7 @@
 
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
+import { getDataLayer } from './data-layer';
 
 export type Doctor = {
   id: string; // slug
@@ -28,7 +29,7 @@ export async function loadDoctors(): Promise<Doctor[]> {
 }
 
 export async function saveDoctors(doctors: Doctor[]): Promise<void> {
-  await db.settings.put({ key: SETTINGS_KEY, value: doctors });
+  await getDataLayer().putSetting(SETTINGS_KEY, doctors);
 }
 
 export async function ensureDefaultDoctorsSeeded(): Promise<void> {

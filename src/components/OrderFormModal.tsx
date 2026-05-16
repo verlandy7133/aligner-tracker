@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
+import { getDataLayer } from '../lib/data-layer';
+import { VersionConflictError, ApiError, NetworkError } from '../lib/api-client';
+import { OfflineError } from '../lib/data-layer-dual';
 import {
   BATCH_TYPE_OPTIONS,
   PROGRESS_OPTIONS,
@@ -165,8 +168,9 @@ export default function OrderFormModal({ target, prefillPatientId, onClose, onCr
       return;
     }
 
+    // v0.6.0: id 編輯模式沿用、新增空字串由 DataLayer/server 生
     const payload: Order = {
-      id: mode === 'edit' && target !== 'new' && target !== null ? target.id : crypto.randomUUID(),
+      id: mode === 'edit' && target !== 'new' && target !== null ? target.id : '',
       patientId: form.patientId,
       patientChartNo: patient.chartNo,
       patientName: patient.name,
@@ -186,10 +190,26 @@ export default function OrderFormModal({ target, prefillPatientId, onClose, onCr
     };
 
     try {
-      await db.orders.put(payload);
+      const dl = getDataLayer();
+      if (mode === 'edit' && target !== 'new' && target !== null) {
+        const version = target._version ?? 1;
+        await dl.putOrder(payload, version);
+      } else {
+        const { id: _drop, ...rest } = payload;
+        void _drop;
+        await dl.createOrder(rest as Order);
+      }
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (e instanceof VersionConflictError) {
+        setError(`下單紀錄已被其他人更新（server v${e.currentVersion}、你 v${e.yourVersion}）。請重開對話框再試。`);
+      } else if (e instanceof OfflineError || e instanceof NetworkError) {
+        setError(`離線中：${e.message}`);
+      } else if (e instanceof ApiError) {
+        setError(`Server 錯誤 (${e.code})：${e.message}`);
+      } else {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     } finally {
       setSaving(false);
     }
@@ -200,10 +220,17 @@ export default function OrderFormModal({ target, prefillPatientId, onClose, onCr
     if (!confirm(`確定刪除這筆下單紀錄？`)) return;
     setSaving(true);
     try {
-      await db.orders.delete(target.id);
+      const version = target._version ?? 1;
+      await getDataLayer().deleteOrder(target.id, version);
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (e instanceof VersionConflictError) {
+        setError(`下單紀錄已被其他機器更新、刪除失敗。請重開頁面再試。`);
+      } else if (e instanceof OfflineError || e instanceof NetworkError) {
+        setError(`離線中、無法刪除`);
+      } else {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     } finally {
       setSaving(false);
     }

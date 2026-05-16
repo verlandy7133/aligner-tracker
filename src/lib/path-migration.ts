@@ -9,6 +9,7 @@
 //   3. 提示「Ctrl+Shift+R 重整 + 推到 NAS」
 
 import { db } from '../db';
+import { getDataLayer } from './data-layer';
 import type { Patient } from '../types/Patient';
 
 // 預設要 strip 的「舊 prefix」、改寫成當前 dataRoot
@@ -124,19 +125,20 @@ export async function applyMigration(candidates: MigrationCandidate[]): Promise<
   let updatedPatients = 0;
   let fieldsUpdated = 0;
 
-  await db.transaction('rw', db.patients, async () => {
-    for (const [id, fixes] of byId) {
-      const p = await db.patients.get(id);
-      if (!p) continue;
-      const patch: Partial<Patient> = { updatedAt: nowIso };
-      for (const f of fixes) {
-        (patch as Record<string, unknown>)[f.field] = f.newPath;
-        fieldsUpdated++;
-      }
-      await db.patients.update(id, patch);
-      updatedPatients++;
+  // v0.6.0: 改 sequential dataLayer 呼叫（dual 模式會 sync server）
+  // Dexie transaction 拿掉、改 server-led optimistic locking
+  const dl = getDataLayer();
+  for (const [id, fixes] of byId) {
+    const p = await db.patients.get(id);
+    if (!p) continue;
+    const patch: Partial<Patient> = { updatedAt: nowIso };
+    for (const f of fixes) {
+      (patch as Record<string, unknown>)[f.field] = f.newPath;
+      fieldsUpdated++;
     }
-  });
+    await dl.updatePatient(id, patch, p._version ?? 1);
+    updatedPatients++;
+  }
 
   return { updatedPatients, fieldsUpdated };
 }

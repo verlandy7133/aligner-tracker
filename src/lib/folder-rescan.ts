@@ -2,6 +2,7 @@
 // 抓最新的 patients JSON，跟 IndexedDB 比對 (姓名+生日)，只新增不存在的。
 
 import { db } from '../db';
+import { getDataLayer } from './data-layer';
 import type { Patient } from '../types/Patient';
 
 export type RescanResult = {
@@ -53,7 +54,8 @@ export async function rescanAndImport(): Promise<RescanResult> {
       next += 1;
       return { ...p, chartNo: String(next).padStart(4, '0') };
     });
-    await db.patients.bulkPut(reChartNumbered);
+    // v0.6.0: 透過 dataLayer.bulkPutPatients 走 server（dual 模式下會 sync 到 NAS）
+    await getDataLayer().bulkPutPatients(reChartNumbered);
   }
 
   return {

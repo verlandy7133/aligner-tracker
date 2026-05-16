@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { db } from '../db';
+import { getDataLayer } from '../lib/data-layer';
+import { VersionConflictError, ApiError, NetworkError } from '../lib/api-client';
+import { OfflineError } from '../lib/data-layer-dual';
 import {
   DEFAULT_CYCLE_DAYS,
   type Patient,
@@ -263,8 +266,9 @@ export default function PatientFormModal({ target, prefillName, onClose }: Patie
       return;
     }
 
+    // v0.6.0: 新增用 server 生 id（DualDataLayer 會給）、edit 用 existingId
     const payload: Patient = {
-      id: existingId ?? crypto.randomUUID(),
+      id: existingId ?? '',
       chartNo: chartNoStr,
       name: form.name.trim(),
       birthday: form.birthday || null,
@@ -312,10 +316,30 @@ export default function PatientFormModal({ target, prefillName, onClose }: Patie
     };
 
     try {
-      await db.patients.put(payload);
+      const dl = getDataLayer();
+      if (mode === 'edit' && target !== 'new' && target !== null) {
+        // 編輯：用 putPatient（樂觀鎖、需 version）
+        const version = target._version ?? 1;
+        await dl.putPatient(payload, version);
+      } else {
+        // 新增：用 createPatient（payload.id 留空、由 DataLayer / server 生）
+        const { id: _drop, ...rest } = payload;
+        void _drop;
+        await dl.createPatient(rest as Patient);
+      }
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (e instanceof VersionConflictError) {
+        setError(
+          `病患資料已被其他人或其他機器更新（server v${e.currentVersion}、你 v${e.yourVersion}）。請關閉本對話框重新開啟、再試一次。`,
+        );
+      } else if (e instanceof OfflineError || e instanceof NetworkError) {
+        setError(`離線中 / 連不上 server：${e.message}。請檢查網路後重試。`);
+      } else if (e instanceof ApiError) {
+        setError(`Server 錯誤 (${e.code})：${e.message}`);
+      } else {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     } finally {
       setSaving(false);
     }
@@ -329,10 +353,17 @@ export default function PatientFormModal({ target, prefillName, onClose }: Patie
       return;
     setSaving(true);
     try {
-      await db.patients.delete(target.id);
+      const version = target._version ?? 1;
+      await getDataLayer().deletePatient(target.id, version);
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (e instanceof VersionConflictError) {
+        setError(`病患資料已被其他機器更新、刪除失敗。請重開頁面再試。`);
+      } else if (e instanceof OfflineError || e instanceof NetworkError) {
+        setError(`離線中、無法刪除`);
+      } else {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     } finally {
       setSaving(false);
     }

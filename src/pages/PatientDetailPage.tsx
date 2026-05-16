@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
+import { getDataLayer } from '../lib/data-layer';
 import type { Patient } from '../types/Patient';
 import {
   STATUS_LABEL,
@@ -176,7 +177,11 @@ export default function PatientDetailPage() {
                   }
                   // 5. 持久化 sourceFolder 到 IndexedDB（下次點不用再問）
                   if (!patient.sourceFolder) {
-                    await db.patients.update(patient.id, { sourceFolder: effectiveFolder });
+                    await getDataLayer().updatePatient(
+                      patient.id,
+                      { sourceFolder: effectiveFolder },
+                      patient._version ?? 1,
+                    );
                   }
                   // 6. 開新建好的資料夾
                   await callHelper('open-folder', effectiveFolder);
@@ -390,11 +395,15 @@ export default function PatientDetailPage() {
               const merged = new Set<string>(patient.allSourceFolders ?? []);
               if (patient.sourceFolder) merged.add(patient.sourceFolder);
               if (trimmed) merged.add(trimmed);
-              await db.patients.update(patient.id, {
-                sourceFolder: trimmed,
-                allSourceFolders: [...merged],
-                updatedAt: new Date().toISOString(),
-              });
+              await getDataLayer().updatePatient(
+                patient.id,
+                {
+                  sourceFolder: trimmed,
+                  allSourceFolders: [...merged],
+                  updatedAt: new Date().toISOString(),
+                },
+                patient._version ?? 1,
+              );
             }}
             className="text-sky-400 hover:text-sky-300 flex-shrink-0 px-1"
             title="編輯路徑"
@@ -420,11 +429,15 @@ export default function PatientDetailPage() {
                         const merged = new Set<string>(patient.allSourceFolders ?? []);
                         if (patient.sourceFolder) merged.add(patient.sourceFolder);
                         merged.add(p);
-                        await db.patients.update(patient.id, {
-                          sourceFolder: p,
-                          allSourceFolders: [...merged],
-                          updatedAt: new Date().toISOString(),
-                        });
+                        await getDataLayer().updatePatient(
+                          patient.id,
+                          {
+                            sourceFolder: p,
+                            allSourceFolders: [...merged],
+                            updatedAt: new Date().toISOString(),
+                          },
+                          patient._version ?? 1,
+                        );
                       }}
                       className="text-emerald-400 hover:text-emerald-300 text-[10px] flex-shrink-0 px-1"
                       title="設為主路徑"

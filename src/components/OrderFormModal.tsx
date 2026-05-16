@@ -12,6 +12,7 @@ import {
   type ProgressStatus,
 } from '../types/Patient';
 import { useDoctors } from '../lib/doctors';
+import { usePermission } from '../contexts/AuthContext';
 import { PRODUCT_LINE_LABEL } from '../labels';
 import { defaultLabNameForProductLine, labBadgeStyle, useLabs } from '../lib/labs';
 
@@ -57,6 +58,11 @@ const EMPTY_FORM: FormState = {
 export default function OrderFormModal({ target, prefillPatientId, onClose, onCreatePatient }: OrderFormModalProps) {
   const open = target !== null;
   const mode: 'new' | 'edit' = target === 'new' ? 'new' : 'edit';
+
+  const canCreateOrder = usePermission('order.create');
+  const canEditOrder = usePermission('order.edit');
+  const canDeleteOrder = usePermission('order.delete');
+  const canSave = mode === 'new' ? canCreateOrder : canEditOrder;
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
@@ -385,15 +391,19 @@ export default function OrderFormModal({ target, prefillPatientId, onClose, onCr
 
         <footer className="px-6 py-4 border-t border-zinc-800 flex items-center justify-between gap-3">
           <div>
-            {mode === 'edit' && (
+            {mode === 'edit' && canDeleteOrder && (
               <button onClick={handleDelete} disabled={saving} className="px-3 py-2 rounded-md text-sm text-rose-400 hover:bg-rose-500/10 transition disabled:opacity-50">刪除</button>
             )}
           </div>
           <div className="flex gap-2">
-            <button onClick={onClose} disabled={saving} className="px-4 py-2 rounded-md text-sm border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition disabled:opacity-50">取消</button>
-            <button onClick={handleSave} disabled={saving} className="px-4 py-2 rounded-md text-sm bg-sky-500 text-zinc-950 font-medium hover:bg-sky-400 transition disabled:opacity-50">
-              {saving ? '儲存中…' : mode === 'new' ? '新增' : '儲存'}
+            <button onClick={onClose} disabled={saving} className="px-4 py-2 rounded-md text-sm border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition disabled:opacity-50">
+              {canSave ? '取消' : '關閉'}
             </button>
+            {canSave && (
+              <button onClick={handleSave} disabled={saving} className="px-4 py-2 rounded-md text-sm bg-sky-500 text-zinc-950 font-medium hover:bg-sky-400 transition disabled:opacity-50">
+                {saving ? '儲存中…' : mode === 'new' ? '新增' : '儲存'}
+              </button>
+            )}
           </div>
         </footer>
       </div>

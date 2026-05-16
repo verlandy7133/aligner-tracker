@@ -22,17 +22,19 @@ import {
 } from '../lib/helper-client';
 import { PHOTO_BORDER_STYLE } from '../lib/photo-style';
 import { READ_ONLY } from '../lib/read-only';
+import { usePermission } from '../contexts/AuthContext';
 
 export default function PatientNotesSection({ patient }: { patient: Patient }) {
   const [hasAnthropicKey, setHasAnthropicKey] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const canEditPhotos = usePermission('patient.photos');
 
   useEffect(() => {
     if (READ_ONLY) return;
     checkAnthropicKey().then((r) => setHasAnthropicKey(r.configured));
   }, []);
 
-  const canAiFill = hasAnthropicKey && !READ_ONLY && !!patient.sourceFolder;
+  const canAiFill = hasAnthropicKey && !READ_ONLY && !!patient.sourceFolder && canEditPhotos;
 
   return (
     <section className="rounded-xl border border-zinc-800 bg-zinc-900/30">
@@ -1350,6 +1352,8 @@ function PhotoPickerModal({
 
 /* ─── markdown 筆記編輯區 ──────────────────────────── */
 function MarkdownNoteEditor({ patient }: { patient: Patient }) {
+  const canEdit = usePermission('patient.notes');
+  const readOnly = READ_ONLY || !canEdit;
   const [value, setValue] = useState(patient.markdownNote || '');
   const [savedTick, setSavedTick] = useState(false);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1388,14 +1392,14 @@ function MarkdownNoteEditor({ patient }: { patient: Patient }) {
       <textarea
         value={value}
         onChange={handleChange}
-        readOnly={READ_ONLY}
-        placeholder={READ_ONLY ? '（無筆記）' : `矯正計畫、治療目標、注意事項…\n\n範例：\n# 治療目標\n1. 改善下顎門牙內傾\n2. 改善後牙咬合空間\n3. 上顎關縫\n4. 改善下巴前凸`}
+        readOnly={readOnly}
+        placeholder={readOnly ? '（無筆記 / 沒權限編輯）' : `矯正計畫、治療目標、注意事項…\n\n範例：\n# 治療目標\n1. 改善下顎門牙內傾\n2. 改善後牙咬合空間\n3. 上顎關縫\n4. 改善下巴前凸`}
         className={`w-full min-h-[200px] px-3 py-2 rounded-md bg-zinc-950/60 border border-zinc-800 text-sm text-zinc-200 font-mono leading-relaxed focus:outline-none resize-y ${
-          READ_ONLY ? 'cursor-default' : 'focus:border-sky-500/50'
+          readOnly ? 'cursor-default' : 'focus:border-sky-500/50'
         }`}
         spellCheck={false}
       />
-      {!READ_ONLY && (
+      {!readOnly && (
         <p className="text-[10px] text-zinc-600 mt-1">
           自動儲存（停止輸入 0.5 秒）· 支援 markdown 格式（# 標題、- 列表、**粗體**）
         </p>

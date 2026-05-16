@@ -25,6 +25,7 @@ import { callHelper, findAndOpenPdf, createFolder, describeHelperFailure } from 
 import { READ_ONLY } from '../lib/read-only';
 import { openAuuForPatient } from '../lib/auu';
 import { getPaths } from '../lib/helper-client';
+import { usePermission } from '../contexts/AuthContext';
 
 // 把西元 birthday (YYYY-MM-DD) 轉成民國格式 (民國YYMMDD 或 民國YYYMMDD)
 // 例：1993-11-02 → 821102；2015-12-07 → 1041207
@@ -57,6 +58,7 @@ export default function PatientDetailPage() {
   const navigate = useNavigate();
   const [editingTarget, setEditingTarget] = useState<Patient | 'new' | null>(null);
 
+  const canEditPatient = usePermission('patient.edit');
   const patient = useLiveQuery(async () => (id ? await db.patients.get(id) : undefined), [id]);
 
   // v0.5.2: 拿當前 dataRoot 給 deriveConventionalSourceFolder 用、不再寫死 D:\矯正\
@@ -242,7 +244,7 @@ export default function PatientDetailPage() {
           >
             🌐 奧優
           </button>
-          {!READ_ONLY && (
+          {!READ_ONLY && canEditPatient && (
             <button
               onClick={() => setEditingTarget(patient)}
               className="px-3 py-2 rounded-md text-sm bg-sky-500 text-zinc-950 font-medium hover:bg-sky-400 transition"
@@ -383,6 +385,7 @@ export default function PatientDetailPage() {
           <code className="font-mono break-all flex-1">
             {patient.sourceFolder || <span className="text-zinc-600">(未設)</span>}
           </code>
+          {canEditPatient && (
           <button
             onClick={async () => {
               const newPath = prompt(
@@ -410,6 +413,7 @@ export default function PatientDetailPage() {
           >
             ✏
           </button>
+          )}
         </div>
         {patient.allSourceFolders && patient.allSourceFolders.length > 0 && (
           <details className="ml-[6em]">
@@ -422,6 +426,7 @@ export default function PatientDetailPage() {
                 .map((p, i) => (
                   <li key={i} className="flex items-center gap-2">
                     <code className="font-mono break-all flex-1 text-[10px] text-zinc-500">{p}</code>
+                    {canEditPatient && (
                     <button
                       onClick={async () => {
                         if (!confirm(`把這條設為主 sourceFolder？\n\n${p}`)) return;
@@ -444,6 +449,7 @@ export default function PatientDetailPage() {
                     >
                       ✓ 設為主
                     </button>
+                    )}
                   </li>
                 ))}
             </ul>

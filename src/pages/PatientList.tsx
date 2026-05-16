@@ -502,6 +502,7 @@ function Row({
   onQuickEdit: () => void;
   isMissingOrder: boolean;
 }) {
+  const canEditPatient = usePermission('patient.edit');
   const age = calcAge(p.birthday);
   const todayISO = new Date().toISOString().slice(0, 10);
   const progress = deriveProgress(p, todayISO);
@@ -529,17 +530,19 @@ function Row({
       <td className="px-3 py-2 font-medium text-zinc-100 whitespace-nowrap">
         <div className="inline-flex items-center gap-2">
           <span>{p.name}</span>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onQuickEdit();
-            }}
-            className="text-zinc-600 hover:text-sky-300 text-xs"
-            title="快速編輯 (彈窗)"
-          >
-            ✎
-          </button>
+          {canEditPatient && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onQuickEdit();
+              }}
+              className="text-zinc-600 hover:text-sky-300 text-xs"
+              title="快速編輯 (彈窗)"
+            >
+              ✎
+            </button>
+          )}
         </div>
         {isMissingOrder && (
           <span

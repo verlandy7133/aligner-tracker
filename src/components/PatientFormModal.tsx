@@ -11,6 +11,7 @@ import {
   type ProductLine,
 } from '../types/Patient';
 import { useDoctors } from '../lib/doctors';
+import { usePermission } from '../contexts/AuthContext';
 import {
   STATUS_LABEL,
   PRODUCT_LINE_LABEL,
@@ -104,6 +105,11 @@ function patientToForm(p: Patient): FormState {
 export default function PatientFormModal({ target, prefillName, onClose }: PatientFormModalProps) {
   const open = target !== null;
   const mode: Mode = target === 'new' ? 'new' : 'edit';
+
+  const canCreatePatient = usePermission('patient.create');
+  const canEditPatient = usePermission('patient.edit');
+  const canDeletePatient = usePermission('patient.delete');
+  const canSave = mode === 'new' ? canCreatePatient : canEditPatient;
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
@@ -666,7 +672,7 @@ export default function PatientFormModal({ target, prefillName, onClose }: Patie
 
         <footer className="px-6 py-4 border-t border-zinc-800 flex items-center justify-between gap-3">
           <div>
-            {mode === 'edit' && (
+            {mode === 'edit' && canDeletePatient && (
               <button
                 onClick={handleDelete}
                 disabled={saving}
@@ -682,15 +688,17 @@ export default function PatientFormModal({ target, prefillName, onClose }: Patie
               disabled={saving}
               className="px-4 py-2 rounded-md text-sm border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition disabled:opacity-50"
             >
-              取消
+              {canSave ? '取消' : '關閉'}
             </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="px-4 py-2 rounded-md text-sm bg-sky-500 text-zinc-950 font-medium hover:bg-sky-400 transition disabled:opacity-50"
-            >
-              {saving ? '儲存中…' : mode === 'new' ? '新增' : '儲存'}
-            </button>
+            {canSave && (
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-4 py-2 rounded-md text-sm bg-sky-500 text-zinc-950 font-medium hover:bg-sky-400 transition disabled:opacity-50"
+              >
+                {saving ? '儲存中…' : mode === 'new' ? '新增' : '儲存'}
+              </button>
+            )}
           </div>
         </footer>
       </div>

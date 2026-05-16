@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
+import { getDataLayer } from '../lib/data-layer';
 import type { Patient } from '../types/Patient';
 import { rescanAndImport, type RescanResult } from '../lib/folder-rescan';
 import { reapplyExcelUpdates, type ReapplyResult } from '../lib/reapply-excel';
@@ -1236,8 +1237,13 @@ function LabSection() {
                   }
                   if (!confirm(`把 ${targets.length} 筆 order 的 lab="${oldName.trim()}" 改成 "${newName.trim()}"？\n不可復原。`)) return;
                   const nowIso = new Date().toISOString();
+                  const dl = getDataLayer();
                   for (const o of targets) {
-                    await db.orders.update(o.id, { lab: newName.trim(), updatedAt: nowIso });
+                    await dl.updateOrder(
+                      o.id,
+                      { lab: newName.trim(), updatedAt: nowIso },
+                      o._version ?? 1,
+                    );
                   }
                   alert(`✓ 已重命名 ${targets.length} 筆 order`);
                 }}
@@ -2210,7 +2216,7 @@ function BirthdayBackfillSection() {
         // 該 patient 雖在 candidates、但實際沒缺的欄位能補（理論上不會發生、保險）
         continue;
       }
-      await db.patients.update(p.id, patch);
+      await getDataLayer().updatePatient(p.id, patch, p._version ?? 1);
       matched.push({
         name: `${p.chartNo} ${p.name}`,
         birthday: c.birthday,
@@ -2448,7 +2454,11 @@ function DoctorBackfillSection() {
         ...new Set(dbOrders.map((o) => o.doctor?.trim()).filter((d): d is string => !!d)),
       ];
       if (dbDoctors.length === 1) {
-        await db.patients.update(p.id, { doctor: dbDoctors[0], updatedAt: nowIso });
+        await getDataLayer().updatePatient(
+          p.id,
+          { doctor: dbDoctors[0], updatedAt: nowIso },
+          p._version ?? 1,
+        );
         matched.push({
           chartNo: p.chartNo,
           name: p.name,
@@ -2474,7 +2484,11 @@ function DoctorBackfillSection() {
         ...new Set(excelDoctorsList.map((o) => o.doctor?.trim()).filter((d): d is string => !!d)),
       ];
       if (excelDoctors.length === 1) {
-        await db.patients.update(p.id, { doctor: excelDoctors[0], updatedAt: nowIso });
+        await getDataLayer().updatePatient(
+          p.id,
+          { doctor: excelDoctors[0], updatedAt: nowIso },
+          p._version ?? 1,
+        );
         matched.push({
           chartNo: p.chartNo,
           name: p.name,
@@ -2500,7 +2514,11 @@ function DoctorBackfillSection() {
         ...new Set(transferredList.map((r) => r.doctor?.trim()).filter((d): d is string => !!d)),
       ];
       if (transferredDoctors.length === 1) {
-        await db.patients.update(p.id, { doctor: transferredDoctors[0], updatedAt: nowIso });
+        await getDataLayer().updatePatient(
+          p.id,
+          { doctor: transferredDoctors[0], updatedAt: nowIso },
+          p._version ?? 1,
+        );
         matched.push({
           chartNo: p.chartNo,
           name: p.name,
@@ -2712,7 +2730,11 @@ function LabBackfillSection() {
       const foundLabs = [...new Set(labNames.filter((name) => haystack.includes(name)))];
 
       if (foundLabs.length === 1) {
-        await db.orders.update(o.id, { lab: foundLabs[0], updatedAt: nowIso });
+        await getDataLayer().updateOrder(
+          o.id,
+          { lab: foundLabs[0], updatedAt: nowIso },
+          o._version ?? 1,
+        );
         matched.push({
           chartNo: p.chartNo,
           name: p.name,
@@ -3251,11 +3273,15 @@ function SourceFolderHealthSection() {
     const merged = new Set<string>(r.patient.allSourceFolders ?? []);
     if (r.oldPath) merged.add(r.oldPath); // 保留 dead 歷史
     merged.add(r.newPath); // 確保 new 在
-    await db.patients.update(r.patient.id, {
-      sourceFolder: r.newPath,
-      allSourceFolders: [...merged],
-      updatedAt: nowIso,
-    });
+    await getDataLayer().updatePatient(
+      r.patient.id,
+      {
+        sourceFolder: r.newPath,
+        allSourceFolders: [...merged],
+        updatedAt: nowIso,
+      },
+      r.patient._version ?? 1,
+    );
   }
 
   async function applyAllRepairs() {
@@ -3489,6 +3515,8 @@ function DbSection() {
 
   async function reset() {
     if (!confirm('清空 IndexedDB？所有病患/下單/設定會被刪除，下次重整會重新匯入。')) return;
+    // v0.6.0 提醒：destructive admin op、刻意不走 DataLayer、只清本機 Dexie
+    // dual 模式下重 load 會從 server 重新拉、回到 server 端真相
     await db.delete();
     location.reload();
   }

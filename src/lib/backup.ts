@@ -108,6 +108,13 @@ export function validateBackup(text: string): BackupValidation {
 // dataRoot 參數：
 //   - 有給 + file.version >= 2 → patients 內 relative path 自動 denormalize 成本機 absolute
 //   - 不給 / file.version < 2 → 視為 absolute path、原樣 bulkPut（舊備份檔、跨機 path 可能不通）
+//
+// v0.6.0 提醒：
+//   importBackup 是 destructive admin op、刻意直接動 Dexie 不走 DataLayer：
+//     - clear()+bulkPut 在 Dexie transaction 內 atomic
+//     - 走 DataLayer 等同要對「刪光所有 record」做 server 同步、太危險
+//   ⚠ Dual 模式下：importBackup 後本機 Dexie 跟 server SQLite 會脫節、user 需手動「推到 NAS」
+//   未來改進方向：server 端 /api/restore endpoint 接受整份 backup file、做 atomic 替換
 export async function importBackup(file: BackupFile, dataRoot?: string): Promise<void> {
   const patients =
     dataRoot && file.version >= 2

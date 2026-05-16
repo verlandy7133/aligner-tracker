@@ -10,6 +10,7 @@
 //   - orders：DB 沒這個 order id 才新增
 
 import { db } from '../db';
+import { getDataLayer } from './data-layer';
 import type { Order, Patient } from '../types/Patient';
 import { getPaths, listFolderNames } from './helper-client';
 import { parseFolderName } from './parse-folder-name';
@@ -189,7 +190,11 @@ export async function reapplyExcelUpdates(): Promise<ReapplyResult> {
       continue;
     }
     // 用 existing.id（可能是 fallback 找到的、跟 u.id 不同）
-    await db.patients.update(existing.id, { ...patch, updatedAt: nowIso });
+    await getDataLayer().updatePatient(
+      existing.id,
+      { ...patch, updatedAt: nowIso },
+      existing._version ?? 1,
+    );
     result.updates.patientsPatched++;
   }
 
@@ -257,7 +262,8 @@ export async function reapplyExcelUpdates(): Promise<ReapplyResult> {
       markdownNote: np.markdownNote ?? '',
       photos: np.photos ?? {},
     };
-    await db.patients.put(enriched);
+    // v0.6.0: createPatient 接受 partial patient with id、server 端會 INSERT
+    await getDataLayer().createPatient(enriched);
     result.newPatients.added++;
     if (autoMatched) result.newPatients.matchedFromFolder++;
   }
@@ -283,7 +289,7 @@ export async function reapplyExcelUpdates(): Promise<ReapplyResult> {
       continue;
     }
     const remappedPid = resolveDbPatientId(o.patientId);
-    await db.orders.put({ ...o, patientId: remappedPid ?? o.patientId });
+    await getDataLayer().createOrder({ ...o, patientId: remappedPid ?? o.patientId });
     result.orders.added++;
   }
 
@@ -326,7 +332,11 @@ export async function reapplyExcelUpdates(): Promise<ReapplyResult> {
     if (newLevel !== p.refinementLevel) fields.refinementLevel = newLevel;
 
     if (Object.keys(fields).length > 0) {
-      await db.patients.update(p.id, { ...fields, updatedAt: nowIso });
+      await getDataLayer().updatePatient(
+        p.id,
+        { ...fields, updatedAt: nowIso },
+        p._version ?? 1,
+      );
       result.derivedCurrent.patientsUpdated++;
     }
   }

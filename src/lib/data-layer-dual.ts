@@ -45,9 +45,14 @@ export class DualDataLayer implements DataLayer {
     this.remote = remote;
     // bridge：dexie / remote 的 onChange 都轉發出去
     this.dexie.onChange((e) => this.emit(e));
-    this.remote.onChange((e) => {
-      // SSE 廣播來的 → reconcile 到 Dexie（先 emit、UI 抓得到、實際資料下個 tick 拉回來）
-      this.reconcileFromRemote(e);
+    this.remote.onChange(async (e) => {
+      // v0.6.0 bug fix: 必須 await reconcile 完成才 emit
+      // 否則 hooks 收到事件後 query Dexie 會讀到 stale data（Dexie 還沒被 SSE fetch 結果覆蓋）
+      try {
+        await this.reconcileFromRemote(e);
+      } catch (err) {
+        console.error('[DualDataLayer] reconcile threw:', err);
+      }
       this.emit(e);
     });
   }
@@ -81,6 +86,16 @@ export class DualDataLayer implements DataLayer {
         } else {
           const v = await this.remote.getSetting(e.key);
           if (v !== null) await db.settings.put({ key: e.key, value: v });
+        }
+      } else if (e.entity === 'bulk') {
+        // v0.6.0 bug fix: 別台機 bulk import 後、SSE 廣播 bulk.imported
+        // 拉該 entity 全量進 Dexie（保留既有 row、bulkPut 同 id 覆蓋）
+        if (e.subEntity === 'patient') {
+          const all = await this.remote.listPatients();
+          await db.patients.bulkPut(all);
+        } else if (e.subEntity === 'order') {
+          const all = await this.remote.listOrders();
+          await db.orders.bulkPut(all);
         }
       }
     } catch (err) {

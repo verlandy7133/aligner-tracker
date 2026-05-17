@@ -300,19 +300,21 @@ function PhotoAIPickerModal({
 /* ─── 14-slot 病歷照片 grid（按 group 分區）──────── */
 const PORTRAIT_SIZE_KEY = 'aligner-portrait-size'; // localStorage key (人像區尺寸)
 const TEETH_SIZE_KEY = 'aligner-teeth-size'; // localStorage key (牙齒區尺寸)
+const PORTRAIT_DEFAULT_SIZE = 75; // 人像預設較小（臉的細節不用大張、節省螢幕）
+const TEETH_DEFAULT_SIZE = 100; // 牙齒預設滿版（看細節要大）
 
-function loadSizeFromStorage(key: string): number {
+function loadSizeFromStorage(key: string, fallback: number): number {
   const stored = localStorage.getItem(key);
   const n = stored ? parseInt(stored, 10) : NaN;
-  return !isNaN(n) && n >= 50 && n <= 100 ? n : 100;
+  return !isNaN(n) && n >= 50 && n <= 100 ? n : fallback;
 }
 
 function PhotoSlotGrid({ patient }: { patient: Patient }) {
   const [picker, setPicker] = useState<{ slot: PhotoSlot; label: string } | null>(null);
   const [editor, setEditor] = useState<{ slot: PhotoSlot; label: string; meta: PhotoMeta } | null>(null);
   // 左右獨立尺寸 slider — 各 50%~100%，存 localStorage 跨 session 沿用
-  const [portraitSize, setPortraitSize] = useState<number>(() => loadSizeFromStorage(PORTRAIT_SIZE_KEY));
-  const [teethSize, setTeethSize] = useState<number>(() => loadSizeFromStorage(TEETH_SIZE_KEY));
+  const [portraitSize, setPortraitSize] = useState<number>(() => loadSizeFromStorage(PORTRAIT_SIZE_KEY, PORTRAIT_DEFAULT_SIZE));
+  const [teethSize, setTeethSize] = useState<number>(() => loadSizeFromStorage(TEETH_SIZE_KEY, TEETH_DEFAULT_SIZE));
   function savePortraitSize(n: number) {
     setPortraitSize(n);
     localStorage.setItem(PORTRAIT_SIZE_KEY, String(n));
@@ -358,11 +360,12 @@ function PhotoSlotGrid({ patient }: { patient: Patient }) {
           </span>
         </h3>
       </div>
-      {/* 左半（人像、寬一點）| 右半（牙齒系列、窄一點）— 各自帶獨立 size slider */}
-      <div className="grid grid-cols-1 lg:grid-cols-[7fr_5fr] gap-4">
+      {/* 左半（人像）| 右半（牙齒系列）— 1:1 平分、各自帶獨立 size slider */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Left: portrait 框框 — 框線粗細/顏色 走 CSS variable (設定可改) */}
-        <div className="rounded-lg bg-zinc-950/40 p-4" style={PHOTO_BORDER_STYLE}>
-          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        {/* v0.6.2: 結構鏡像右邊牙齒框、加隱形 subgroup spacer 對齊第一排照片頂部 */}
+        <div className="rounded-lg bg-zinc-950/40 p-4 space-y-4" style={PHOTO_BORDER_STYLE}>
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="text-xs text-zinc-200 font-semibold flex items-center gap-2">
               <span className="text-base">🙂</span>
               <span>{PHOTO_GROUP_LABEL.portrait}</span>
@@ -370,18 +373,31 @@ function PhotoSlotGrid({ patient }: { patient: Patient }) {
             </div>
             <SizeSlider value={portraitSize} onChange={savePortraitSize} title="調整人像區尺寸" />
           </div>
-          <div className="grid grid-cols-2 gap-3 items-start" style={{ maxWidth: `${portraitSize}%` }}>
-            {byGroup.portrait.map((slot) => (
-              <PhotoSlotCell
-                key={slot.key}
-                patient={patient}
-                slotKey={slot.key}
-                slotLabel={slot.label}
-                meta={patient.photos?.[slot.key]}
-                onPickClick={() => setPicker({ slot: slot.key, label: slot.label })}
-                onEditClick={(meta) => setEditor({ slot: slot.key, label: slot.label, meta })}
-              />
-            ))}
+          {/* 把 6 張人像分成 3 個 2-photo 小組、結構鏡像右邊牙齒 frame 的 subgroup
+              （X光/口外/口內 第一排）→ 每排照片頂部跟右邊對齊。
+              每組上方加隱形 label spacer、外層 space-y-4 對應 subgroup 間距。 */}
+          <div style={{ maxWidth: `${portraitSize}%` }} className="space-y-4">
+            {[0, 1, 2].map((groupIdx) => {
+              const pair = byGroup.portrait.slice(groupIdx * 2, groupIdx * 2 + 2);
+              return (
+                <div key={groupIdx}>
+                  <div className="text-[10px] mb-1.5 font-medium invisible select-none" aria-hidden="true">·</div>
+                  <div className="grid grid-cols-2 gap-2 items-start">
+                    {pair.map((slot) => (
+                      <PhotoSlotCell
+                        key={slot.key}
+                        patient={patient}
+                        slotKey={slot.key}
+                        slotLabel={slot.label}
+                        meta={patient.photos?.[slot.key]}
+                        onPickClick={() => setPicker({ slot: slot.key, label: slot.label })}
+                        onEditClick={(meta) => setEditor({ slot: slot.key, label: slot.label, meta })}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 

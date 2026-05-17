@@ -255,7 +255,9 @@ export default function PatientDetailPage() {
         </div>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      {/* 左 1/3：meta 卡片網格（xl 以下 2-col、xl 起單 col 直排讓寬度 = 1/3 螢幕）*/}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 gap-4 xl:col-span-1">
         {/* 基本資料 */}
         <Card title="基本資料">
           <KV k="病歷號" v={patient.chartNo} />
@@ -283,28 +285,29 @@ export default function PatientDetailPage() {
           <KV k="換套週期" v={`${patient.cycleDays} 天`} />
         </Card>
 
-        {/* 副數進度 (含推算) */}
-        <Card title="副數進度" className="md:col-span-2">
-          {/* 療程時間摘要：一副週期 + 已進行 + 剩餘 + 預計總月份 */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 pb-3 border-b border-zinc-800/60">
-            <Stat label="一副要帶" value={`${progress.cycleDays} 天`} />
-            <Stat
+        {/* 副數進度 (含推算) — 窄欄下緊湊版：stats 改成 label-value 橫排列、progress 上下堆疊 */}
+        <Card title="副數進度" className="md:col-span-2 xl:col-span-1">
+          {/* 療程時間摘要：4 個指標、xl 窄欄改成 list、寬欄維持 4 in row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-1 gap-2 xl:gap-1 mb-3 pb-2 border-b border-zinc-800/60">
+            <CompactStat label="一副要帶" value={`${progress.cycleDays} 天`} />
+            <CompactStat
               label="已進行"
               value={progress.monthsElapsed != null ? `${progress.monthsElapsed} 個月` : '—'}
               hint={progress.monthsElapsed == null ? '需現在副數' : undefined}
             />
-            <Stat
+            <CompactStat
               label="剩餘"
               value={progress.monthsRemaining != null ? `${progress.monthsRemaining} 個月` : '—'}
               hint={progress.monthsRemaining == null ? '需總副數' : undefined}
             />
-            <Stat
+            <CompactStat
               label="預計總療程"
               value={progress.totalMonths != null ? `${progress.totalMonths} 個月` : '—'}
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-6">
+          {/* progress：xl 窄欄上下堆、寬欄左右並排 */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-3">
             <JawProgressBlock label="上顎" jaw={progress.upper} />
             <JawProgressBlock label="下顎" jaw={progress.lower} />
           </div>
@@ -327,8 +330,11 @@ export default function PatientDetailPage() {
         </Card>
       </div>
 
-      {/* 病患筆記 + 8-slot 病歷照片（inline 在詳細頁、master + readOnly 都顯示）*/}
-      <PatientNotesSection patient={patient} />
+      {/* 右 2/3：病患筆記 + 病歷照片（xl 以上跟左半並排、以下排在下面）*/}
+      <div className="xl:col-span-2">
+        <PatientNotesSection patient={patient} />
+      </div>
+      </div>
 
       {/* 下單紀錄 */}
       <section>
@@ -505,6 +511,19 @@ function Stat({ label, value, hint }: { label: string; value: React.ReactNode; h
         {value}
       </span>
       {hint && <span className="text-[10px] text-zinc-600 mt-0.5">{hint}</span>}
+    </div>
+  );
+}
+
+// 緊湊版：在窄欄（xl: 1-col）變成 label-value 橫排列；寬欄維持垂直堆疊
+function CompactStat({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
+  return (
+    <div className="flex flex-col xl:flex-row xl:items-baseline xl:justify-between gap-x-2">
+      <span className="text-[10px] uppercase tracking-wider text-zinc-500 xl:text-xs xl:normal-case xl:tracking-normal">{label}</span>
+      <span className="text-base font-semibold tabular text-zinc-100 mt-0.5 xl:mt-0 xl:text-sm" title={hint}>
+        {value}
+      </span>
+      {hint && <span className="text-[10px] text-zinc-600 mt-0.5 xl:basis-full xl:text-right">{hint}</span>}
     </div>
   );
 }

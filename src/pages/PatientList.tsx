@@ -31,7 +31,8 @@ const DEFAULT_SORT: { field: SortField; dir: SortDir } = { field: 'orderDate', d
 export default function PatientList() {
   const [search, setSearch] = useState('');
   // 多選 filter：空 set = 全部
-  const [statusFilter, setStatusFilter] = useState<Set<PatientStatus>>(new Set());
+  // 預設只顯示「治療中」(active) — 中斷 / 完成 / 已轉出 不顯示、點 filter 才看
+  const [statusFilter, setStatusFilter] = useState<Set<PatientStatus>>(() => new Set(['active']));
   const [trackFilter, setTrackFilter] = useState<Set<NonNullable<PatientTrack>>>(new Set());
   const [refinementFilter, setRefinementFilter] = useState<Set<1 | 2 | 3>>(new Set());
   const [plFilter, setPlFilter] = useState<ProductLine | 'all'>('all');

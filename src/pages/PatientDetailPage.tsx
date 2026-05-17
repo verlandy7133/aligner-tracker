@@ -503,18 +503,7 @@ function KV({ k, v }: { k: string; v: React.ReactNode }) {
   );
 }
 
-function Stat({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
-  return (
-    <div className="flex flex-col">
-      <span className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</span>
-      <span className="text-base font-semibold tabular text-zinc-100 mt-0.5" title={hint}>
-        {value}
-      </span>
-      {hint && <span className="text-[10px] text-zinc-600 mt-0.5">{hint}</span>}
-    </div>
-  );
-}
-
+// v0.6.3: Stat 元件已被 CompactStat 取代、移除避免 tsc unused warning
 // 緊湊版：在窄欄（xl: 1-col）變成 label-value 橫排列；寬欄維持垂直堆疊
 function CompactStat({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
   return (

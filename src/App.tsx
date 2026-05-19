@@ -13,7 +13,7 @@ import { seedIfEmpty } from './seed';
 import { useTheme } from './themes';
 import { initScale } from './lib/ui-scale';
 import { initPhotoStyle } from './lib/photo-style';
-import { syncStat } from './lib/helper-client';
+import { syncStat, initHelperDetection } from './lib/helper-client';
 import { READ_ONLY, initReadOnlyData } from './lib/read-only';
 
 const SYNC_LAST_PUSHED_KEY = 'aligner-sync-last-pushed';
@@ -32,6 +32,8 @@ export default function App() {
     // 套用儲存的 UI 字級 scale + 框線樣式（不論 readOnly 與否都套）
     initScale();
     initPhotoStyle();
+    // v0.6.7: 偵測本機 helper service 是否可用、決定照片走 helper 還是 NAS API
+    initHelperDetection();
 
     if (READ_ONLY) {
       // readOnly mode (Stage B iPad)：從 server fetch snapshot 進 IndexedDB

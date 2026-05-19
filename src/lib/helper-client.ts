@@ -1,12 +1,14 @@
 // 與本機 folder-helper service 對話的 client。
 // helper 跑在 http://127.0.0.1:8765 (見 scripts/folder-helper.mjs)
 //
-// readOnly mode（Stage B、iPad 唯讀 web）：
-//   - 沒 helper service（iPad 上沒辦法跑 Node 後台）
-//   - 用 same-origin /api/* (見 server/index.js)
-//   - 大多數 mutation endpoint 不會被 UI 觸發、但 getImageUrl / listFolderFiles 等讀取功能要 redirect
+// v0.6.7 三層策略（auto-detect、不靠 build-time READ_ONLY flag）：
+//   1. 啟動時 ping helper /health
+//   2. 有 helper → 用 helper（本機快、不過 NAS）
+//   3. 沒 helper（iPad 之類沒裝後台的）→ 自動 fallback 走 NAS /api/files + /api/image
+//      （NAS server 端 /data 內有照片本體、能直接 serve）
 
 import { READ_ONLY } from './read-only';
+import { apiBase } from './api-client';
 
 export type HelperEndpoint = 'open-folder' | 'open-file';
 
@@ -16,6 +18,27 @@ export type HelperResult =
   | { state: 'helper-down' };
 
 const HELPER_BASE = 'http://127.0.0.1:8765';
+
+// 啟動時偵測 helper 是否可用（getImageUrl 是 sync、必須有 cached 結果）
+// 由 main.tsx / App.tsx 開機時呼叫 initHelperDetection() 主動更新此 flag
+let helperAvailable = false;
+
+export async function initHelperDetection(): Promise<boolean> {
+  try {
+    const r = await fetch(`${HELPER_BASE}/health`, {
+      signal: AbortSignal.timeout(2000),
+    });
+    helperAvailable = r.ok;
+  } catch {
+    helperAvailable = false;
+  }
+  console.log(`[helper] detection: ${helperAvailable ? 'available' : 'unavailable, fallback to NAS API'}`);
+  return helperAvailable;
+}
+
+export function isHelperAvailable(): boolean {
+  return helperAvailable;
+}
 
 export async function callHelper(endpoint: HelperEndpoint, path: string): Promise<HelperResult> {
   try {
@@ -56,16 +79,17 @@ export async function listFolderNames(folder: string): Promise<{ names: string[]
 }
 
 // 列指定資料夾底下所有圖片檔（給病患照片 slot 選擇器用）
-// readOnly mode redirect 到 /api/files（server 端 path-traversal-safe、本機 helper 不可用）
+// v0.6.7：READ_ONLY 或 helper 不可用 → 走 NAS API（iPad / 純瀏覽器也能看照片）
 export async function listFolderFiles(
   folder: string,
   types: string[] = ['jpg', 'jpeg', 'png', 'heic'],
 ): Promise<{ names: string[]; folder: string } | { error: string }> {
   const typesParam = types.join(',');
-  if (READ_ONLY) {
+  // 走 NAS server：READ_ONLY mode、或本機沒 helper（iPad 之類）
+  if (READ_ONLY || !helperAvailable) {
     try {
       const resp = await fetch(
-        `/api/files?folder=${encodeURIComponent(folder)}&types=${encodeURIComponent(typesParam)}`,
+        `${apiBase}/api/files?folder=${encodeURIComponent(folder)}&types=${encodeURIComponent(typesParam)}`,
       );
       if (resp.ok) {
         const data = (await resp.json()) as { folder: string; count: number; files: string[] };
@@ -83,6 +107,7 @@ export async function listFolderFiles(
       return { error: 'server-down' };
     }
   }
+  // 有 helper（本機開發 / 診所筆電）→ 走本機 helper 更快、不過 NAS
   try {
     const resp = await fetch(
       `${HELPER_BASE}/list-folder-files?folder=${encodeURIComponent(folder)}&types=${encodeURIComponent(typesParam)}`,
@@ -98,11 +123,11 @@ export async function listFolderFiles(
 }
 
 // 產出 <img src="..."> 用的 URL
-// readOnly mode：用 /api/image（same-origin、走 Stage B server）
-// master mode：用 helper /serve-image（localhost:8765）
+// v0.6.7：READ_ONLY 或 helper 不可用 → 走 NAS /api/image（iPad 之類沒裝 helper 也能看照片）
+// 有 helper → 走 localhost:8765/serve-image（本機快）
 export function getImageUrl(absolutePath: string): string {
-  if (READ_ONLY) {
-    return `/api/image?path=${encodeURIComponent(absolutePath)}`;
+  if (READ_ONLY || !helperAvailable) {
+    return `${apiBase}/api/image?path=${encodeURIComponent(absolutePath)}`;
   }
   return `${HELPER_BASE}/serve-image?path=${encodeURIComponent(absolutePath)}`;
 }

@@ -17,12 +17,38 @@ const API_BASE =
     ? 'http://localhost:8080'
     : `http://${window.location.hostname}:8080`);
 
+// uuid 產生器：crypto.randomUUID() 只在 HTTPS / localhost 可用、HTTP+IP 在 LAN 內網
+// 就會 undefined（非 secure context）。fallback 用 crypto.getRandomValues（這個 HTTP 也有）
+// 還有 fallback 用 Math.random（最後手段、entropy 弱但不會 crash）
+export function safeUUID(): string {
+  // 1st choice: Web Crypto secure context only
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  // 2nd choice: getRandomValues (non-secure-context 也有)
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const b = new Uint8Array(16);
+    crypto.getRandomValues(b);
+    // RFC 4122 v4 mask
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    const h = Array.from(b, (n) => n.toString(16).padStart(2, '0')).join('');
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+  }
+  // Last resort: Math.random
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 // clientId 一台機一份、存 localStorage、SSE 廣播時 server 用來 exclude 自己
 const CLIENT_ID_KEY = 'aligner-tracker.client-id';
 function getOrCreateClientId(): string {
   let id = localStorage.getItem(CLIENT_ID_KEY);
   if (!id) {
-    id = crypto.randomUUID();
+    id = safeUUID();
     localStorage.setItem(CLIENT_ID_KEY, id);
   }
   return id;

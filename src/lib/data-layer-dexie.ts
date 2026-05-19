@@ -13,6 +13,7 @@
 import { db } from '../db';
 import type { Patient, Order } from '../types/Patient';
 import type { Setting } from '../db';
+import { safeUUID } from './api-client';
 import type {
   DataLayer,
   ChangeEvent,
@@ -58,7 +59,7 @@ export class DexieDataLayer implements DataLayer {
     const now = this.nowIso();
     const full: Patient = {
       ...(p as Patient),
-      id: p.id || crypto.randomUUID(),
+      id: p.id || safeUUID(),
       createdAt: p.createdAt || now,
       updatedAt: now,
     };
@@ -116,7 +117,7 @@ export class DexieDataLayer implements DataLayer {
     const now = this.nowIso();
     const full: Order = {
       ...(o as Order),
-      id: o.id || crypto.randomUUID(),
+      id: o.id || safeUUID(),
       createdAt: o.createdAt || now,
       updatedAt: now,
     };

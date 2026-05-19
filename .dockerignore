@@ -10,6 +10,12 @@ dist
 *.tar
 *.tar.gz
 
+# v0.6.6: 環境變數檔不能進 Docker、不然 Vite build 時會把開發機 IP（譬如 Tailscale）
+# 烘進 dist、讓內網 client 連不到。Docker build 用 Dockerfile 內 ENV 即可。
+.env
+.env.*
+!.env.example
+
 # 個資資料夾（病患資料夾等實體檔）
 **/病患資料夾/
 **/病患授權書/

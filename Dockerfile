@@ -33,10 +33,12 @@ COPY package*.json ./
 RUN npm ci --legacy-peer-deps
 
 # Copy source + 跑 build
-# 注意：v0.6.0 起 client 端會跟 server API 直接互通、不再純 readonly
-# 暫時保留 VITE_READ_ONLY=1（Phase 1 期間 client DataLayer 還沒切過去）
+# v0.6.4：拿掉 VITE_READ_ONLY=1（Phase 1 結束、DataLayer 已切到 dual mode）
+# 設 VITE_DATA_MODE=dual → dist 內建 dual mode、API 直接打 NAS（不需要本機 helper）
+# VITE_API_BASE 留空、runtime fallback 用 window.location.hostname:8080 自動偵測
+# （iPad 連 192.168.0.220:8080 → api 也用 192.168.0.220:8080；Tailscale 連 100.x → api 也用 100.x）
 COPY . .
-ENV VITE_READ_ONLY=1
+ENV VITE_DATA_MODE=dual
 RUN npm run build
 
 # 安裝 server deps（獨立、不混進 main package.json）

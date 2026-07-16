@@ -42,10 +42,26 @@ export async function verifyPassword(plain, stored) {
 }
 
 // ─── JWT secret 管理 ──────────────────────────────────
+// 讀取優先序（v0.6.8 防禦縱深 — 讓 secret 可離開「可被 /api/file serve 的 /data」）：
+//   1. process.env.JWT_SECRET       — 直接給值（NAS 設環境變數最省事）
+//   2. process.env.JWT_SECRET_PATH  — 指向「未掛進 serve 目錄」的檔（如 /run/secrets/jwt）
+//   3. fallback：現行 <dbPath 同層>/jwt-secret.txt（未設 env 時維持原行為、向下相容）
+// 注意：本次只加「讀取來源優先序」、不主動更換 secret 值（換 secret 會讓現有 token 全失效）。
 let _jwtSecret = null;
 export function getJwtSecret(dbPath) {
   if (_jwtSecret) return _jwtSecret;
-  // 跟 db.sqlite 放同層、namespace 用 /data/jwt-secret.txt
+  // (1) 環境變數直接給值
+  if (process.env.JWT_SECRET && process.env.JWT_SECRET.trim()) {
+    _jwtSecret = process.env.JWT_SECRET.trim();
+    return _jwtSecret;
+  }
+  // (2) 環境變數指向 secret 檔（放非 serve 目錄）
+  const envPath = process.env.JWT_SECRET_PATH;
+  if (envPath && fs.existsSync(envPath)) {
+    _jwtSecret = fs.readFileSync(envPath, 'utf8').trim();
+    return _jwtSecret;
+  }
+  // (3) fallback：跟 db.sqlite 放同層、namespace 用 <dir>/jwt-secret.txt
   const dir = path.dirname(dbPath);
   const secretFile = path.join(dir, 'jwt-secret.txt');
   if (fs.existsSync(secretFile)) {

@@ -78,6 +78,29 @@ function safePath(rel) {
   return full;
 }
 
+// ─── Allowlist 守門（v0.6.8 火2）────────────────────────
+// safePath 只擋 traversal、擋不住 DATA_PATH 根目錄的敏感檔（db.sqlite / jwt-secret.txt 等）。
+// 這道守門限制：只放行病患資產子樹 + 副檔名白名單。擋到就 throw ServeForbidden → 端點回 403。
+//   - relPath = stripMasterPrefix 後的相對路徑（用 / 正規化）
+//   - segs.length < 2 → 擋 DATA_PATH 根目錄的檔（jwt-secret.txt / db.sqlite 都在根）
+//   - segs[0] 必須是白名單頂層資料夾
+//   - allowExt 給陣列 → 檢查副檔名；給 null → 只套 root allowlist（列目錄用）
+const SERVABLE_ROOTS = ['病患資料夾', '病患授權書'];
+const IMAGE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'bmp', 'tiff'];
+const FILE_EXT = ['pdf', 'zip', 'docx', 'xlsx']; // 不放行 txt/json/sqlite/db/wal/shm/env/key/pem/exe/js/html/svg
+
+class ServeForbidden extends Error {}
+
+function assertServable(relPath, allowExt) {
+  const segs = String(relPath).replace(/\\/g, '/').split('/').filter(Boolean);
+  if (segs.length < 2) throw new ServeForbidden('forbidden: not a patient asset');
+  if (!SERVABLE_ROOTS.includes(segs[0])) throw new ServeForbidden('forbidden: root not allowed');
+  if (allowExt) {
+    const ext = segs[segs.length - 1].split('.').pop().toLowerCase();
+    if (!allowExt.includes(ext)) throw new ServeForbidden(`forbidden: ext not allowed (${ext})`);
+  }
+}
+
 // Mime type lookup
 const MIME = {
   jpg: 'image/jpeg',
@@ -240,6 +263,7 @@ app.get('/api/files', (req, res) => {
   }
   try {
     const rel = stripMasterPrefix(folder);
+    assertServable(rel, null); // 只套 root allowlist、列目錄不限副檔名
     const target = safePath(rel);
     if (!fs.existsSync(target)) {
       res.status(404).json({ error: 'folder not found', resolved: target });
@@ -263,6 +287,7 @@ app.get('/api/files', (req, res) => {
       folders,
     });
   } catch (e) {
+    if (e instanceof ServeForbidden) return res.status(403).json({ error: 'forbidden', message: e.message });
     res.status(400).json({ error: e.message });
   }
 });
@@ -277,6 +302,7 @@ app.get('/api/image', (req, res) => {
   }
   try {
     const rel = stripMasterPrefix(reqPath);
+    assertServable(rel, IMAGE_EXT); // 火2：只放行病患資產子樹 + 圖片副檔名
     const target = safePath(rel);
     if (!fs.existsSync(target)) {
       res.status(404).json({ error: 'file not found', resolved: target });
@@ -295,6 +321,7 @@ app.get('/api/image', (req, res) => {
       res.end();
     });
   } catch (e) {
+    if (e instanceof ServeForbidden) return res.status(403).json({ error: 'forbidden', message: e.message });
     res.status(400).json({ error: e.message });
   }
 });
@@ -308,6 +335,7 @@ app.get('/api/file', (req, res) => {
   }
   try {
     const rel = stripMasterPrefix(reqPath);
+    assertServable(rel, FILE_EXT); // 火2：只放行病患資產子樹 + 文件副檔名（擋 db.sqlite / jwt-secret.txt 等）
     const target = safePath(rel);
     if (!fs.existsSync(target)) {
       res.status(404).json({ error: 'file not found', resolved: target });
@@ -320,6 +348,7 @@ app.get('/api/file', (req, res) => {
     res.setHeader('Last-Modified', stat.mtime.toUTCString());
     fs.createReadStream(target).pipe(res);
   } catch (e) {
+    if (e instanceof ServeForbidden) return res.status(403).json({ error: 'forbidden', message: e.message });
     res.status(400).json({ error: e.message });
   }
 });

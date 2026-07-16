@@ -1,0 +1,11 @@
+# 備份帳號憑證範本 — 複製成 scripts/.backup-env 後填入真值
+# （scripts/.backup-env 已 gitignore、不進 git、不進 Dropbox）
+#
+# backup 帳號需要「最小權限」：patient.view + order.view（用 create-backup-account.mjs 建）
+BACKUP_USER=backup
+BACKUP_PASS=請填入你為 backup 帳號設定的密碼
+
+# 選配：第二份異地備份路徑。**禁止**指向 Dropbox / 雲端同步夾（含 PII）。
+# 未填 = 只寫本機一份。填了含「Dropbox」字樣 = 腳本會直接 exit(1) 拒絕。
+# 範例（外接碟 / 另一顆本機碟、非同步）：
+# BACKUP_OFFSITE=E:\aligner-offsite-backup

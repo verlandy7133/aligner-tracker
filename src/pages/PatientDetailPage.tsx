@@ -20,7 +20,9 @@ import {
 } from '../labels';
 import { deriveProgress } from '../lib/progress';
 import PatientFormModal from '../components/PatientFormModal';
+import VisitFormModal from '../components/VisitFormModal';
 import PatientNotesSection from '../components/PatientNotesSection';
+import type { Visit } from '../types/Patient';
 import { callHelper, findAndOpenPdf, createFolder, describeHelperFailure } from '../lib/helper-client';
 import { READ_ONLY } from '../lib/read-only';
 import { openAuuForPatient } from '../lib/auu';
@@ -57,9 +59,21 @@ export default function PatientDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [editingTarget, setEditingTarget] = useState<Patient | 'new' | null>(null);
+  const [visitModalOpen, setVisitModalOpen] = useState(false);
 
   const canEditPatient = usePermission('patient.edit');
   const patient = useLiveQuery(async () => (id ? await db.patients.get(id) : undefined), [id]);
+
+  // v0.7.0: 回診歷史（最新在上 = date DESC, createdAt DESC）
+  const visits =
+    useLiveQuery(
+      async () => (id ? await db.visits.where('patientId').equals(id).toArray() : []),
+      [id],
+    ) ?? [];
+  const sortedVisits = [...visits].sort((a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+    return (a.createdAt || '') < (b.createdAt || '') ? 1 : -1;
+  });
 
   // v0.5.2: 拿當前 dataRoot 給 deriveConventionalSourceFolder 用、不再寫死 D:\矯正\
   const [dataRoot, setDataRoot] = useState<string>('D:\\矯正');
@@ -246,6 +260,14 @@ export default function PatientDetailPage() {
           </button>
           {!READ_ONLY && canEditPatient && (
             <button
+              onClick={() => setVisitModalOpen(true)}
+              className="px-3 py-2 rounded-md text-sm border border-sky-500/40 text-sky-300 hover:bg-sky-500/10 transition"
+            >
+              ✓ 今日回診
+            </button>
+          )}
+          {!READ_ONLY && canEditPatient && (
+            <button
               onClick={() => setEditingTarget(patient)}
               className="px-3 py-2 rounded-md text-sm bg-sky-500 text-zinc-950 font-medium hover:bg-sky-400 transition"
             >
@@ -317,9 +339,10 @@ export default function PatientDetailPage() {
         </Card>
 
         {/* 回診 */}
-        <Card title="回診">
+        <Card title="回診" className="md:col-span-2 xl:col-span-1">
           <KV k="上次回診" v={patient.lastVisit ?? '—'} />
           <KV k="下次回診" v={patient.nextVisit ?? '—'} />
+          <VisitHistory visits={sortedVisits} />
         </Card>
 
         {/* 備註 */}
@@ -471,6 +494,11 @@ export default function PatientDetailPage() {
         }}
       />
 
+      {/* v0.7.0: 今日回診登記（patient 連動由 useLiveQuery 自動刷新）*/}
+      {visitModalOpen && (
+        <VisitFormModal patient={patient} onClose={() => setVisitModalOpen(false)} />
+      )}
+
       {/* 刪除後 navigate 回列表 */}
       {editingTarget === null && !patient && navigate('/')}
     </div>
@@ -524,6 +552,57 @@ function Badge({ children, className = '' }: { children: React.ReactNode; classN
     >
       {children}
     </span>
+  );
+}
+
+// v0.7.0: 回診歷史清單（最新在上、>5 筆折疊）
+function VisitHistory({ visits }: { visits: Visit[] }) {
+  const [showAll, setShowAll] = useState(false);
+  if (visits.length === 0) {
+    return (
+      <div className="mt-3 pt-3 border-t border-zinc-800/60">
+        <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-medium mb-1">回診歷史</div>
+        <p className="text-xs text-zinc-600">尚無回診記錄</p>
+      </div>
+    );
+  }
+  const shown = showAll ? visits : visits.slice(0, 5);
+  return (
+    <div className="mt-3 pt-3 border-t border-zinc-800/60">
+      <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-medium mb-2">
+        回診歷史（{visits.length}）
+      </div>
+      <ul className="space-y-1.5">
+        {shown.map((v) => {
+          const aligner =
+            v.alignerUpper == null && v.alignerLower == null
+              ? null
+              : `U${v.alignerUpper ?? '—'}/L${v.alignerLower ?? '—'}`;
+          return (
+            <li key={v.id} className="text-xs flex items-start gap-2">
+              <span className="tabular text-zinc-400 flex-shrink-0 w-[5.5em]">{v.date}</span>
+              <div className="min-w-0 flex-1">
+                <span className="text-zinc-200">{v.visitType}</span>
+                {aligner && <span className="text-zinc-500 tabular ml-2">{aligner}</span>}
+                {v.note && (
+                  <span className="text-zinc-500 block truncate" title={v.note}>
+                    {v.note}
+                  </span>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      {visits.length > 5 && (
+        <button
+          onClick={() => setShowAll((s) => !s)}
+          className="mt-2 text-[11px] text-sky-400 hover:text-sky-300"
+        >
+          {showAll ? '收合' : `顯示全部（${visits.length}）`}
+        </button>
+      )}
+    </div>
   );
 }
 

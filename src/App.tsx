@@ -4,6 +4,7 @@ import PatientList from './pages/PatientList';
 import PatientDetailPage from './pages/PatientDetailPage';
 import OrderTracking from './pages/OrderTracking';
 import OrderReportPage from './pages/OrderReportPage';
+import VisitWorkbenchPage from './pages/VisitWorkbenchPage';
 import SettingsPage from './pages/SettingsPage';
 import ThemeSelector from './components/ThemeSelector';
 import { OnlineStatusBadge, OfflineBanner } from './components/OnlineStatus';
@@ -140,6 +141,7 @@ export default function App() {
           <div className="flex items-center gap-1">
             <NavItem to="/">病患列表</NavItem>
             <NavItem to="/orders">下單追蹤</NavItem>
+            <NavItem to="/visits">回診</NavItem>
             <NavItem to="/settings">
               <span className="relative inline-flex items-center">
                 ⚙ 設定
@@ -184,6 +186,7 @@ export default function App() {
           <Route path="/patients/:id" element={<PatientDetailPage />} />
           <Route path="/orders" element={<OrderTracking />} />
           <Route path="/orders/report" element={<OrderReportPage />} />
+          <Route path="/visits" element={<VisitWorkbenchPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>

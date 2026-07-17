@@ -31,6 +31,12 @@ import {
   useDoctors,
 } from '../lib/doctors';
 import {
+  DEFAULT_VISIT_TYPES,
+  loadVisitTypes,
+  saveVisitTypes,
+  useVisitTypes,
+} from '../lib/visit-types';
+import {
   type AlertThresholds,
   DEFAULT_THRESHOLDS,
   loadThresholds,
@@ -100,6 +106,7 @@ export default function SettingsPage() {
           {SHOW_LEGACY_SYNC && <SyncSection />}
           <LabSection />
           <DoctorSection />
+          <VisitTypeSection />
           <AlertSection />
           <BackupSection />
           <RescanSection />
@@ -1576,6 +1583,151 @@ function DoctorEditor({ target, onClose }: { target: Doctor | 'new' | null; onCl
         </footer>
       </div>
     </div>
+  );
+}
+
+/* ─── 回診類型管理（v0.7.0、存 settings key='visit-types'）──── */
+function VisitTypeSection() {
+  const types = useVisitTypes();
+  const [expanded, setExpanded] = useState(false);
+  const [newType, setNewType] = useState('');
+  const [error, setError] = useState('');
+
+  async function addType() {
+    const name = newType.trim();
+    if (!name) return;
+    const current = await loadVisitTypes();
+    if (current.includes(name)) {
+      setError(`「${name}」已存在`);
+      return;
+    }
+    await saveVisitTypes([...current, name]);
+    setNewType('');
+    setError('');
+  }
+
+  async function removeType(name: string) {
+    const current = await loadVisitTypes();
+    if (current.length <= 1) {
+      setError('至少要保留一種回診類型');
+      return;
+    }
+    if (!confirm(`刪除回診類型「${name}」？\n已登記的回診記錄會保留原字串、不受影響。`)) return;
+    await saveVisitTypes(current.filter((t) => t !== name));
+    setError('');
+  }
+
+  async function move(name: string, dir: -1 | 1) {
+    const current = await loadVisitTypes();
+    const i = current.indexOf(name);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= current.length) return;
+    const next = [...current];
+    [next[i], next[j]] = [next[j], next[i]];
+    await saveVisitTypes(next);
+  }
+
+  const isDefault =
+    types.length === DEFAULT_VISIT_TYPES.length &&
+    types.every((t, i) => t === DEFAULT_VISIT_TYPES[i]);
+
+  return (
+    <section className="rounded-xl border border-zinc-800 bg-zinc-900/30">
+      <header
+        onClick={() => setExpanded(!expanded)}
+        className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between cursor-pointer hover:bg-zinc-800/30 transition"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-zinc-500 text-xs w-3">{expanded ? '▾' : '▸'}</span>
+          <h2 className="text-sm font-medium text-zinc-200">回診類型管理</h2>
+          <span className="text-xs text-zinc-500">({types.length} 種)</span>
+          {!expanded && (
+            <span className="text-[11px] text-zinc-600">
+              {types.slice(0, 3).join('、')}
+              {types.length > 3 && '…'}
+            </span>
+          )}
+        </div>
+        {!isDefault && (
+          <button
+            onClick={async (e) => {
+              e.stopPropagation();
+              if (!confirm('還原成預設 7 種回診類型？')) return;
+              await saveVisitTypes([...DEFAULT_VISIT_TYPES]);
+            }}
+            className="px-3 py-1.5 rounded-md text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 transition"
+          >
+            還原預設
+          </button>
+        )}
+      </header>
+      {expanded && (
+        <div className="p-3 space-y-2">
+          {/* 新增列 */}
+          <div className="flex items-center gap-2 px-1">
+            <input
+              value={newType}
+              onChange={(e) => setNewType(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') addType();
+              }}
+              placeholder="新增回診類型（例：拆牙套）"
+              className="flex-1 h-9 px-3 rounded-md bg-zinc-900/60 border border-zinc-800 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-sky-500/50"
+            />
+            <button
+              onClick={addType}
+              disabled={!newType.trim()}
+              className="px-3 py-1.5 rounded-md text-xs bg-sky-500 text-zinc-950 font-medium hover:bg-sky-400 transition disabled:opacity-50"
+            >
+              + 新增
+            </button>
+          </div>
+          {error && (
+            <div className="mx-1 px-3 py-2 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+              ⚠️ {error}
+            </div>
+          )}
+          {types.map((t, i) => (
+            <div
+              key={t}
+              className="flex items-center justify-between gap-3 px-3 py-2 rounded-md bg-zinc-900/40 border border-zinc-800"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-zinc-600 text-xs tabular w-4">{i + 1}</span>
+                <span className="text-sm text-zinc-100">{t}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => move(t, -1)}
+                  disabled={i === 0}
+                  className="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded disabled:opacity-30"
+                  title="上移"
+                >
+                  ↑
+                </button>
+                <button
+                  onClick={() => move(t, 1)}
+                  disabled={i === types.length - 1}
+                  className="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded disabled:opacity-30"
+                  title="下移"
+                >
+                  ↓
+                </button>
+                <button
+                  onClick={() => removeType(t)}
+                  className="px-2 py-1 text-xs text-rose-400 hover:bg-rose-500/10 rounded"
+                >
+                  刪除
+                </button>
+              </div>
+            </div>
+          ))}
+          <p className="text-[11px] text-zinc-500 px-1 pt-1">
+            回診登記表單的「回診類型」chips 來源。排序 = chips 顯示順序、第一個為登記表單預設選取。
+          </p>
+        </div>
+      )}
+    </section>
   );
 }
 

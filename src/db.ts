@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { Order, Patient } from './types/Patient';
+import type { Order, Patient, Visit } from './types/Patient';
 
 export type Setting = { key: string; value: unknown };
 
@@ -7,6 +7,7 @@ class AlignerDB extends Dexie {
   patients!: Table<Patient, string>;
   orders!: Table<Order, string>;
   settings!: Table<Setting, string>;
+  visits!: Table<Visit, string>;
 
   constructor() {
     super('aligner-tracker');
@@ -155,6 +156,16 @@ class AlignerDB extends Dexie {
             p.photos = photos;
           });
       });
+
+    // v10: 加 visits table（回診登記 v0.7.0）
+    // 新 store、無資料遷移（append-only 記錄、舊 patient 資料不動）
+    // index：id (pk) / patientId / date / updatedAt
+    this.version(10).stores({
+      patients: 'id, chartNo, name, status, productLine, nextVisit, orderDate, doctor, *flags',
+      orders: 'id, patientId, patientChartNo, date, doctor, progress, lab',
+      settings: 'key',
+      visits: 'id, patientId, date, updatedAt',
+    });
   }
 }
 

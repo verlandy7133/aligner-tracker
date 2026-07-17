@@ -89,6 +89,28 @@ CREATE INDEX IF NOT EXISTS idx_orders_progress      ON orders(progress);
 CREATE INDEX IF NOT EXISTS idx_orders_lab           ON orders(lab);
 CREATE INDEX IF NOT EXISTS idx_orders_updated_at    ON orders(updated_at);
 
+-- ─── visits (v0.7.0 回診登記)──────────────────────────────
+-- append-only 回診記錄；POST 有 patient 回寫 side-effect（見 server/routes/visits.js）
+-- 對照 migration 004_add_visits.sql（fresh install 走此表、既有 DB 走 migration）
+CREATE TABLE IF NOT EXISTS visits (
+  id            TEXT PRIMARY KEY,
+  patient_id    TEXT NOT NULL,
+  date          TEXT NOT NULL,            -- 回診日 YYYY-MM-DD（可補登過去日期）
+  visit_type    TEXT NOT NULL DEFAULT '定期調整',
+  aligner_upper INTEGER,                  -- 當時戴到第幾副（選填、NULL=沒更新）
+  aligner_lower INTEGER,
+  next_visit    TEXT,                     -- 下次回診日（選填）
+  note          TEXT NOT NULL DEFAULT '',
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL,
+  created_by    TEXT NOT NULL DEFAULT 'system',
+  updated_by    TEXT NOT NULL DEFAULT 'system',
+  version       INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_visits_patient    ON visits(patient_id);
+CREATE INDEX IF NOT EXISTS idx_visits_date       ON visits(date);
+CREATE INDEX IF NOT EXISTS idx_visits_updated_at ON visits(updated_at);
+
 -- ─── settings ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS settings (
   key                      TEXT PRIMARY KEY,

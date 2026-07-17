@@ -35,6 +35,7 @@ import { openDb, getDb } from './db/db.js';
 import { authStub, authOptional } from './middleware/auth.js';
 import patientsRouter from './routes/patients.js';
 import ordersRouter from './routes/orders.js';
+import visitsRouter from './routes/visits.js';
 import settingsRouter from './routes/settings.js';
 import authRouter from './routes/auth.js';
 import usersRouter from './routes/users.js';
@@ -176,6 +177,7 @@ app.use('/api/audit-log', requireDb, auditLogRouter);
 // 替換成 requirePermission 才會真正 enforce。
 app.use('/api/patients', requireDb, patientsRouter);
 app.use('/api/orders', requireDb, ordersRouter);
+app.use('/api/visits', requireDb, visitsRouter);
 app.use('/api/settings', requireDb, settingsRouter);
 
 // ─── SSE 即時推播 endpoint ────────────────────────────────

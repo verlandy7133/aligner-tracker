@@ -16,7 +16,7 @@
 //   - 離線（_online=false）時、寫操作直接 throw OfflineError
 //   - 讀仍走 Dexie（本機快取可用）
 
-import type { Patient, Order } from '../types/Patient';
+import type { Patient, Order, Visit } from '../types/Patient';
 import type { Setting } from '../db';
 import type {
   DataLayer,
@@ -24,6 +24,7 @@ import type {
   Unsubscribe,
   PatientFilter,
   OrderFilter,
+  VisitFilter,
 } from './data-layer';
 import { db } from '../db';
 import { ApiError, NetworkError } from './api-client';
@@ -79,6 +80,15 @@ export class DualDataLayer implements DataLayer {
         } else {
           const fresh = await this.remote.getOrder(e.id);
           if (fresh) await db.orders.put(fresh);
+        }
+      } else if (e.entity === 'visit') {
+        // 沒有單筆 GET visit 端點；create/update 用 listVisits 抓該 patient 全部覆蓋 Dexie。
+        // 注意 patient 回寫 side-effect 由另一則 patient.updated SSE 走上面的 patient reconcile。
+        if (e.action === 'deleted') {
+          await db.visits.delete(e.id);
+        } else if (e.patientId) {
+          const list = await this.remote.listVisits({ patientId: e.patientId });
+          await db.visits.bulkPut(list);
         }
       } else if (e.entity === 'setting') {
         if (e.action === 'deleted') {
@@ -264,6 +274,60 @@ export class DualDataLayer implements DataLayer {
     await db.orders.bulkPut(orders);
   }
 
+  // ─── Visits (v0.7.0 回診登記)──
+  async listVisits(filter?: VisitFilter): Promise<Visit[]> {
+    return this.dexie.listVisits(filter);
+  }
+
+  async createVisit(v: Partial<Visit> & Pick<Visit, 'patientId' | 'date' | 'visitType'>): Promise<Visit> {
+    if (!this.remote.isOnline()) throw new OfflineError();
+    // 先讓 server 生 id + version + 做 patient 回寫 side-effect、再回寫 Dexie
+    const created = await this.remote.createVisit(v);
+    await db.visits.put(created);
+    this.emit({ entity: 'visit', action: 'created', id: created.id, patientId: created.patientId });
+    // server 端已回寫 patient（lastVisit / nextVisit / currentAligner）；SSE 廣播會 exclude 自己，
+    // 所以本機主動抓最新 patient 覆蓋 Dexie，讓病患列表「下次回診」欄即時活起來。
+    try {
+      const fresh = await this.remote.getPatient(created.patientId);
+      if (fresh) {
+        await db.patients.put(fresh);
+        this.emit({ entity: 'patient', action: 'updated', id: created.patientId, version: fresh._version });
+      }
+    } catch (err) {
+      console.warn('[DualDataLayer] createVisit patient refresh failed:', err);
+    }
+    return created;
+  }
+
+  async updateVisit(id: string, patch: Partial<Visit>, version: number): Promise<Visit> {
+    const before = await db.visits.get(id);
+    return this.dualWrite(
+      async () => {
+        if (before) await db.visits.put({ ...before, ...patch, updatedAt: new Date().toISOString() });
+      },
+      async () => {
+        const updated = await this.remote.updateVisit(id, patch, version);
+        await db.visits.put(updated);
+        return updated;
+      },
+      async () => {
+        if (before) await db.visits.put(before);
+      },
+    );
+  }
+
+  async deleteVisit(id: string, version: number): Promise<void> {
+    const before = await db.visits.get(id);
+    if (!this.remote.isOnline()) throw new OfflineError();
+    await db.visits.delete(id);
+    try {
+      await this.remote.deleteVisit(id, version);
+    } catch (e) {
+      if (before) await db.visits.put(before);
+      throw e;
+    }
+  }
+
   // ─── Settings ──
   async getSetting<T = unknown>(key: string): Promise<T | null> {
     return this.dexie.getSetting<T>(key);
@@ -316,20 +380,22 @@ export class DualDataLayer implements DataLayer {
 
     if (this.remote.isOnline()) {
       try {
-        // 完整 pull patients + orders + settings 進 Dexie
-        const [patients, orders, settings] = await Promise.all([
+        // 完整 pull patients + orders + visits + settings 進 Dexie
+        const [patients, orders, visits, settings] = await Promise.all([
           this.remote.listPatients(),
           this.remote.listOrders(),
+          this.remote.listVisits(),
           this.remote.listSettings(),
         ]);
-        await db.transaction('rw', db.patients, db.orders, db.settings, async () => {
+        await db.transaction('rw', db.patients, db.orders, db.visits, db.settings, async () => {
           // Phase 1：bulkPut（不刪 Dexie 既有資料、避免覆蓋手動編輯）
           // Phase 2：改成 sync = 全量替換
           await db.patients.bulkPut(patients);
           await db.orders.bulkPut(orders);
+          await db.visits.bulkPut(visits);
           await db.settings.bulkPut(settings);
         });
-        console.log(`[DualDataLayer] initial sync: ${patients.length} patients / ${orders.length} orders / ${settings.length} settings`);
+        console.log(`[DualDataLayer] initial sync: ${patients.length} patients / ${orders.length} orders / ${visits.length} visits / ${settings.length} settings`);
       } catch (e) {
         console.warn('[DualDataLayer] initial sync failed:', e);
       }

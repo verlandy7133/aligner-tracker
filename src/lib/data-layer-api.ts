@@ -12,7 +12,7 @@
 //
 // 不負責：本機 Dexie 寫入（那是 DexieDataLayer / DualDataLayer 的事）
 
-import type { Patient, Order } from '../types/Patient';
+import type { Patient, Order, Visit } from '../types/Patient';
 import type { Setting } from '../db';
 import type {
   DataLayer,
@@ -20,6 +20,7 @@ import type {
   Unsubscribe,
   PatientFilter,
   OrderFilter,
+  VisitFilter,
 } from './data-layer';
 import { api, apiGet, apiBase, NetworkError } from './api-client';
 import { normalizePatient, denormalizePatient } from './path-normalize';
@@ -85,6 +86,11 @@ async function wrapPatient<T extends Partial<Patient>>(p: T): Promise<T> {
 // Orders 沒 path 欄位、直接 passthrough
 function unwrapOrder(o: any): Order {
   return o as Order;
+}
+
+// Visits 沒 path 欄位、直接 passthrough
+function unwrapVisit(v: any): Visit {
+  return v as Visit;
 }
 
 export class ApiDataLayer implements DataLayer {
@@ -182,6 +188,15 @@ export class ApiDataLayer implements DataLayer {
     );
     this.es.addEventListener('order.deleted', (ev) =>
       handle(ev as MessageEvent, (d) => ({ entity: 'order', action: 'deleted', id: d.id, patientId: d.patientId })),
+    );
+    this.es.addEventListener('visit.created', (ev) =>
+      handle(ev as MessageEvent, (d) => ({ entity: 'visit', action: 'created', id: d.id, patientId: d.patientId, version: d.version })),
+    );
+    this.es.addEventListener('visit.updated', (ev) =>
+      handle(ev as MessageEvent, (d) => ({ entity: 'visit', action: 'updated', id: d.id, patientId: d.patientId, version: d.version })),
+    );
+    this.es.addEventListener('visit.deleted', (ev) =>
+      handle(ev as MessageEvent, (d) => ({ entity: 'visit', action: 'deleted', id: d.id, patientId: d.patientId })),
     );
     this.es.addEventListener('setting.updated', (ev) =>
       handle(ev as MessageEvent, (d) => ({ entity: 'setting', action: 'updated', key: d.key })),
@@ -298,6 +313,35 @@ export class ApiDataLayer implements DataLayer {
 
   async bulkPutOrders(orders: Order[]): Promise<void> {
     await api('/api/orders/bulk', { method: 'POST', body: { orders } });
+  }
+
+  // ─── Visits (v0.7.0 回診登記)──
+  async listVisits(filter?: VisitFilter): Promise<Visit[]> {
+    const params: string[] = [];
+    if (filter?.patientId) params.push(`patientId=${encodeURIComponent(filter.patientId)}`);
+    if (filter?.date) params.push(`date=${encodeURIComponent(filter.date)}`);
+    if (filter?.since) params.push(`since=${encodeURIComponent(filter.since)}`);
+    if (filter?.limit != null) params.push(`limit=${encodeURIComponent(String(filter.limit))}`);
+    const qs = params.length > 0 ? `?${params.join('&')}` : '';
+    const r = await apiGet<ServerResponse<Visit[]>>(`/api/visits${qs}`);
+    return r.data.map(unwrapVisit);
+  }
+
+  async createVisit(v: Partial<Visit> & Pick<Visit, 'patientId' | 'date' | 'visitType'>): Promise<Visit> {
+    const r = await api<ServerResponse<Visit>>('/api/visits', { method: 'POST', body: v });
+    return unwrapVisit(r.data);
+  }
+
+  async updateVisit(id: string, patch: Partial<Visit>, version: number): Promise<Visit> {
+    const r = await api<ServerResponse<Visit>>(`/api/visits/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: { ...patch, version },
+    });
+    return unwrapVisit(r.data);
+  }
+
+  async deleteVisit(id: string, version: number): Promise<void> {
+    await api(`/api/visits/${encodeURIComponent(id)}?version=${version}`, { method: 'DELETE' });
   }
 
   // ─── Settings ──

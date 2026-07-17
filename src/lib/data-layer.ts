@@ -12,13 +12,14 @@
 //   - onChange 事件 stream 給 UI live update
 //   - isOnline / onConnectivityChange 給 OnlineStatus 元件用
 
-import type { Patient, Order } from '../types/Patient';
+import type { Patient, Order, Visit } from '../types/Patient';
 import type { Setting } from '../db';
 
 // ─── 事件 ────────────────────────────────────────────
 export type ChangeEvent =
   | { entity: 'patient'; action: 'created' | 'updated' | 'deleted'; id: string; version?: number }
   | { entity: 'order'; action: 'created' | 'updated' | 'deleted'; id: string; patientId?: string; version?: number }
+  | { entity: 'visit'; action: 'created' | 'updated' | 'deleted'; id: string; patientId?: string; version?: number }
   | { entity: 'setting'; action: 'updated' | 'deleted'; key: string }
   | { entity: 'bulk'; subEntity: 'patient' | 'order'; count: number };
 
@@ -34,6 +35,13 @@ export type PatientFilter = {
 export type OrderFilter = {
   since?: string;
   patientId?: string;
+};
+
+export type VisitFilter = {
+  since?: string;
+  patientId?: string;
+  date?: string; // YYYY-MM-DD 精確過濾
+  limit?: number;
 };
 
 // ─── 主介面 ──────────────────────────────────────────
@@ -56,6 +64,12 @@ export interface DataLayer {
   putOrder(o: Order, version: number): Promise<Order>;
   deleteOrder(id: string, version: number): Promise<void>;
   bulkPutOrders(orders: Order[]): Promise<void>;
+
+  // ─── Visits (v0.7.0 回診登記)──
+  listVisits(filter?: VisitFilter): Promise<Visit[]>;
+  createVisit(v: Partial<Visit> & Pick<Visit, 'patientId' | 'date' | 'visitType'>): Promise<Visit>;
+  updateVisit(id: string, patch: Partial<Visit>, version: number): Promise<Visit>;
+  deleteVisit(id: string, version: number): Promise<void>;
 
   // ─── Settings ──
   getSetting<T = unknown>(key: string): Promise<T | null>;

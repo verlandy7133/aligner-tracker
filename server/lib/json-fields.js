@@ -127,6 +127,41 @@ export function orderObjToRow(o) {
   };
 }
 
+// ─── Visit 轉換 (v0.7.0 回診登記)─────────────────────────
+export function visitRowToObj(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    date: row.date,
+    visitType: row.visit_type,
+    alignerUpper: row.aligner_upper,
+    alignerLower: row.aligner_lower,
+    nextVisit: row.next_visit,
+    note: row.note ?? '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    _createdBy: row.created_by,
+    _updatedBy: row.updated_by,
+    _version: row.version,
+  };
+}
+
+export function visitObjToRow(v) {
+  return {
+    id: v.id,
+    patient_id: v.patientId,
+    date: v.date,
+    visit_type: v.visitType ?? '定期調整',
+    aligner_upper: v.alignerUpper ?? null,
+    aligner_lower: v.alignerLower ?? null,
+    next_visit: v.nextVisit ?? null,
+    note: v.note ?? '',
+    created_at: v.createdAt,
+    updated_at: v.updatedAt,
+  };
+}
+
 // ─── 通用 helper ──────────────────────────────────────────
 function parseJsonField(s, fallback) {
   if (s == null || s === '') return fallback;

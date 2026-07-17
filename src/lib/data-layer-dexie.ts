@@ -11,7 +11,7 @@
 //   - isOnline 永遠回 true（本機 Dexie 不依賴網路）
 
 import { db } from '../db';
-import type { Patient, Order } from '../types/Patient';
+import type { Patient, Order, Visit } from '../types/Patient';
 import type { Setting } from '../db';
 import { safeUUID } from './api-client';
 import type {
@@ -20,6 +20,7 @@ import type {
   Unsubscribe,
   PatientFilter,
   OrderFilter,
+  VisitFilter,
 } from './data-layer';
 
 export class DexieDataLayer implements DataLayer {
@@ -151,6 +152,82 @@ export class DexieDataLayer implements DataLayer {
   async bulkPutOrders(orders: Order[]): Promise<void> {
     await db.orders.bulkPut(orders);
     this.emit({ entity: 'bulk', subEntity: 'order', count: orders.length });
+  }
+
+  // ─── Visits (v0.7.0 回診登記)──
+  async listVisits(filter?: VisitFilter): Promise<Visit[]> {
+    let coll;
+    if (filter?.patientId) {
+      coll = db.visits.where('patientId').equals(filter.patientId);
+    } else {
+      coll = db.visits.toCollection();
+    }
+    let result = await coll.toArray();
+    if (filter?.date) result = result.filter((v) => v.date === filter.date);
+    if (filter?.since) result = result.filter((v) => (v.updatedAt || '') > filter.since!);
+    // ORDER BY date DESC, createdAt DESC（對齊 server）
+    result.sort((a, b) => {
+      if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+      return (a.createdAt || '') < (b.createdAt || '') ? 1 : -1;
+    });
+    if (filter?.limit != null && filter.limit > 0) result = result.slice(0, filter.limit);
+    return result;
+  }
+
+  async createVisit(v: Partial<Visit> & Pick<Visit, 'patientId' | 'date' | 'visitType'>): Promise<Visit> {
+    const now = this.nowIso();
+    const full: Visit = {
+      ...(v as Visit),
+      id: v.id || safeUUID(),
+      alignerUpper: v.alignerUpper ?? null,
+      alignerLower: v.alignerLower ?? null,
+      nextVisit: v.nextVisit ?? null,
+      note: v.note ?? '',
+      createdAt: v.createdAt || now,
+      updatedAt: now,
+    };
+    await db.visits.put(full);
+    this.emit({ entity: 'visit', action: 'created', id: full.id, patientId: full.patientId });
+
+    // ── 本機端 patient 回寫 side-effect（規則同 server §2.2）──
+    const patient = await db.patients.get(full.patientId);
+    if (patient) {
+      const patch: Partial<Patient> = {};
+      // lastVisit：只在 visit.date >= 現有 lastVisit（或現有為空）時更新——補登舊回診不倒退
+      if (!patient.lastVisit || full.date >= patient.lastVisit) {
+        patch.lastVisit = full.date;
+      }
+      // nextVisit：僅當 caller 有帶（含明確 null＝清空）；沒帶＝不動
+      if (Object.prototype.hasOwnProperty.call(v, 'nextVisit')) {
+        patch.nextVisit = full.nextVisit ?? null;
+      }
+      // currentAligner*：僅當帶非 null；null/沒帶＝不動
+      if (v.alignerUpper != null) patch.currentAlignerUpper = v.alignerUpper;
+      if (v.alignerLower != null) patch.currentAlignerLower = v.alignerLower;
+
+      if (Object.keys(patch).length > 0) {
+        await db.patients.put({ ...patient, ...patch, updatedAt: this.nowIso() });
+        this.emit({ entity: 'patient', action: 'updated', id: patient.id });
+      }
+    }
+    return full;
+  }
+
+  async updateVisit(id: string, patch: Partial<Visit>, _version: number): Promise<Visit> {
+    // PATCH 只修 visit 本身、不重放 patient side-effect（修 typo 用）
+    const before = await db.visits.get(id);
+    if (!before) throw new Error(`visit not found: ${id}`);
+    const updated = { ...before, ...patch, id, updatedAt: this.nowIso() };
+    await db.visits.put(updated);
+    this.emit({ entity: 'visit', action: 'updated', id, patientId: updated.patientId });
+    return updated;
+  }
+
+  async deleteVisit(id: string, _version: number): Promise<void> {
+    // 不回滾 patient 欄位（規則同 server）
+    const before = await db.visits.get(id);
+    await db.visits.delete(id);
+    this.emit({ entity: 'visit', action: 'deleted', id, patientId: before?.patientId });
   }
 
   // ─── Settings ──

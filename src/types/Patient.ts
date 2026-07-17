@@ -193,3 +193,24 @@ export type Order = {
 
 export const BATCH_TYPE_OPTIONS = ['新', '舊', '新設計', '新設計1', '舊設計', '其他'];
 // DOCTOR_OPTIONS 已搬到 src/lib/doctors.ts 變動態，改用 useDoctors() hook
+
+// ─── 回診登記 (Visit) v0.7.0 ────────────────────────────────
+// append-only 回診記錄；POST 時 server 端有 patient 回寫 side-effect
+// （lastVisit / nextVisit / currentAligner 連動、見 server/routes/visits.js）
+export type Visit = {
+  id: string;
+  patientId: string;
+  date: string; // YYYY-MM-DD
+  visitType: string;
+  alignerUpper: number | null;
+  alignerLower: number | null;
+  nextVisit: string | null;
+  note: string;
+  createdAt: string;
+  updatedAt: string;
+  _version?: number;
+  _createdBy?: string;
+  _updatedBy?: string;
+};
+
+export const DEFAULT_VISIT_TYPES = ['定期調整', '取新牙套', '黏 attachment', '拆 attachment', 'IPR', '緊急處理', '結案檢查'];

@@ -35,6 +35,9 @@ aligner-tracker-backup-*.json
 # v0.6.8 備份帳號憑證（BACKUP_USER / BACKUP_PASS、絕對不能 commit / 不進 Dropbox）
 scripts/.backup-env
 
+# Excel 自動匯入帳號憑證（SYNC_USER / SYNC_PASS、絕對不能 commit / 不進 Dropbox）
+scripts/.sync-env
+
 # Stage B build log (post-commit hook 寫入)
 .stage-b-build.log
 

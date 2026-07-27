@@ -1,0 +1,13 @@
+# Excel 自動匯入帳號憑證範本 — 複製成 scripts/.sync-env 後填入真值
+# （scripts/.sync-env 已 gitignore、不進 git、不進 Dropbox）
+#
+# sync 帳號需要的最小權限（用 create-sync-account.mjs 建）：
+#   patient.view + patient.create + patient.edit
+#   order.view   + order.create   + order.edit
+# 不含任何 delete、不含 settings.*
+SYNC_USER=sync
+SYNC_PASS=請填入你為 sync 帳號設定的密碼
+
+# 選配：覆寫 NAS API 位址（預設 Tailscale、失敗自動退 LAN）
+# NAS_API=http://100.115.111.45:8080
+# NAS_LAN_FALLBACK=http://192.168.0.220:8080

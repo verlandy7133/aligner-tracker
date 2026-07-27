@@ -110,7 +110,26 @@ async function main() {
   await fsp.writeFile(tmp, buf);
   await fsp.rename(tmp, OUT_FILE);
 
+  // ── 保留 4 天歷史版本（主上裁決）──
+  // archive/<原檔名>.<YYYY-MM-DD>.xlsx；每天一份（同日重跑覆蓋當日份）、清掉 4 天前的
+  const day = new Date().toISOString().slice(0, 10);
+  const archiveDir = path.join(OUT_DIR, 'archive');
+  await fsp.mkdir(archiveDir, { recursive: true });
+  const base = path.basename(OUT_FILE, '.xlsx');
+  await fsp.writeFile(path.join(archiveDir, `${base}.${day}.xlsx`), buf);
+  const keepDays = 4;
+  const cutoff = new Date(Date.now() - keepDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  let pruned = 0;
+  for (const f of await fsp.readdir(archiveDir)) {
+    const m = f.match(/\.(\d{4}-\d{2}-\d{2})\.xlsx$/);
+    if (m && m[1] < cutoff) {
+      await fsp.unlink(path.join(archiveDir, f)).catch(() => {});
+      pruned++;
+    }
+  }
+
   console.log(`[${ts()}] ✓ 完成：${OUT_FILE}（${(buf.length / 1024).toFixed(0)} KB）`);
+  console.log(`  歷史副本：archive/${base}.${day}.xlsx（保留 ${keepDays} 天${pruned ? `、清掉 ${pruned} 份舊檔` : ''}）`);
   console.log('  下一步：app 設定頁 →「掃描並套用 Excel」即可匯入最新資料');
 }
 

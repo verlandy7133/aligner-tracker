@@ -37,3 +37,6 @@ scripts/.backup-env
 
 # Stage B build log (post-commit hook 寫入)
 .stage-b-build.log
+
+# Google OAuth 憑證（sync-google-sheet.mjs 用、絕不 commit）
+.secrets/
